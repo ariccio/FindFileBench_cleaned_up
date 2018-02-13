@@ -13,7 +13,7 @@
 #pragma warning(disable:4710) //The given function was selected for inline expansion, but the compiler did not perform the inlining.
 
 
-#pragma warning(push, 1)
+#pragma warning(push, 4)
 
 #define _WIN32_WINNT 0x0600
 
@@ -24,18 +24,8 @@
 
 //#define MFC_C_FILE_FIND_TEST //MFC is huge, and makes compiling slow, so let's not #include it unless we want it.
 
-#ifdef MFC_C_FILE_FIND_TEST
-#define _ATL_CSTRING_EXPLICIT_CONSTRUCTORS      // some CString constructors will be explicit
-#define _AFX_NO_MFC_CONTROLS_IN_DIALOGS         // remove support for MFC controls in dialogs
-
-#include <afx.h>
-#include <afxwin.h>         // MFC core and standard components
-#else
 #pragma comment(lib, "Advapi32.lib")
 #include <Windows.h>
-#endif
-
-
 #include "targetver.h"
 
 
