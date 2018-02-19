@@ -36,9 +36,9 @@ __int64 stdRecurseFindFutures( _In_ std::wstring dir ) {
 	HANDLE fDataHand = ::FindFirstFileExW(dir.c_str(), FindExInfoStandard, &fData, FindExSearchNameMatch, NULL, 0);
 
 	if ( fDataHand != INVALID_HANDLE_VALUE ) {
-		if ( ::wcscmp( fData.cFileName, L".." ) != 0 ) {
+		//if ( ::wcscmp( fData.cFileName, L".." ) != 0 ) {
 			//++num;
-			}
+			//}
 		BOOL res = ::FindNextFileW( fDataHand, &fData );
 		while ( ( fDataHand != INVALID_HANDLE_VALUE ) && ( res != 0 ) ) {
 			const auto scmpVal = ::wcscmp( fData.cFileName, L".." );
