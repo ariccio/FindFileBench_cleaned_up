@@ -99,6 +99,6 @@ int wmain( int argc,  _Readable_elements_( argc ) WCHAR* argv[ ], WCHAR*[ ] ) {
 	const DOUBLE record = iterate(argv[1]);
 
 	puts("---------------------\r\n");
-	wprintf(L"Time in seconds:  %s\r\n", L"", std::to_wstring(record));
+	wprintf(L"Time in seconds:  %s\r\n", std::to_wstring(record).c_str());
 	return 0;
 	}
