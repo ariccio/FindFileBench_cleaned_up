@@ -38,6 +38,7 @@
 #include <vector>
 #include <cassert>
 #include <future>
+#include <winternl.h>
 #include <stdio.h>
 
 #pragma warning(pop)
