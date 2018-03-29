@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "FileFindBench.h"
 
-
+constexpr bool writeToScreen = true;
 
 void test( _Post_ptr_invalid_ HANDLE){}
 
@@ -59,10 +59,40 @@ std::wstring handyDandyErrMsgFormatter( ) {
 	return std::wstring( L"FormatMessage failed to format an error!" );
 	}
 
+_Success_( return != UINT64_MAX )
+std::uint64_t GetCompressedFileSize_filename( const std::wstring path ) {
+	ULARGE_INTEGER ret;
+	const auto last_err_old = ::GetLastError( );
+	ret.QuadPart = 0;//zero initializing this is critical!
+	ret.LowPart = ::GetCompressedFileSizeW( path.c_str( ), &ret.HighPart );
+	const auto last_err = ::GetLastError( );
+	if ( ret.LowPart == INVALID_FILE_SIZE ) {
+		if ( ret.HighPart != NULL ) {
+			if ( ( last_err != NO_ERROR ) && ( last_err != last_err_old ) ) {
+				fwprintf( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+				return UINT64_MAX;// IN case of an error return size from CFileFind object
+				}
+			fwprintf( stderr, L"WTF ERROR! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+			return UINT64_MAX;
+			}
+		else {
+			if ( ( last_err != NO_ERROR ) && ( last_err != last_err_old ) ) {
+				fwprintf( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+				return UINT64_MAX;
+				}
+			return ret.QuadPart;
+			}
+		}
+	return ret.QuadPart;
+	}
+
 
 void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	NtdllWrap ntdll;
-	std::wstring dir = L"\\\\?\\" + raw_dir;
+	const std::wstring dir = L"\\\\?\\" + raw_dir;
+
+	std::uint64_t total_size = 0;
+	std::uint64_t numItems = 0;
 
 	const HANDLE nt_dir_handle = ::CreateFileW(dir.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OVERLAPPED, NULL);
 	if ( nt_dir_handle == INVALID_HANDLE_VALUE ) {
@@ -118,13 +148,9 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	//bool id_info_heap = false;
 	const ULONG_PTR bufSizeWritten = iosb.Information;
 
-	const auto idInfoSize = bufSize;
 	
 	//This zeros just enough of the idInfo buffer ( after the end of valid data ) to halt the forthcoming while loop at the last valid data. This saves the effort of zeroing larger parts of the buffer.
 	for ( size_t i = bufSizeWritten; i < bufSizeWritten + ( sizeof( THIS_FILE_INFORMATION_CLASS ) + ( MAX_PATH * sizeof( wchar_t ) ) * 2 ); ++i ) {
-		if ( i == idInfoSize ) {
-			break;
-			}
 		assert( i < bufSize );
 		idInfo[ i ] = 0;
 		}
@@ -132,8 +158,121 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	
 	const ULONG_PTR count_records = bufSizeWritten / sizeof( THIS_FILE_INFORMATION_CLASS );
 	PTHIS_FILE_INFORMATION_CLASS pFileInf = reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>( idInfo.get( ) );
-	(void)pFileInf;
-	(void)count_records;
+
+
+	assert( pFileInf != NULL );
+	while ( NT_SUCCESS( query_directory_result ) && ( pFileInf != NULL ) ) {
+		//PFILE_ID_BOTH_DIR_INFORMATION pFileInf = ( FILE_ID_BOTH_DIR_INFORMATION* ) buffer;
+
+		assert( pFileInf->FileNameLength > 1 );
+		if ( pFileInf->FileName[ 0 ] == L'.' && ( pFileInf->FileName[ 1 ] == 0 || ( pFileInf->FileName[ 1 ] == '.' ) ) ) {
+			//continue;
+			goto nextItem;
+			}
+
+		total_size += pFileInf->AllocationSize.QuadPart;
+		//const auto lores = GetCompressedFileSizeW( , ) 
+		{
+		const std::wstring this_file_name( pFileInf->FileName, ( pFileInf->FileNameLength / sizeof( WCHAR ) ) );
+		const std::wstring some_name( dir + L'\\' + this_file_name );
+		const auto comp_file_size = GetCompressedFileSize_filename( some_name );
+		if ( !( pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) ) {
+			if ( writeToScreen && !( std::uint64_t( pFileInf->AllocationSize.QuadPart ) == comp_file_size ) ) {
+				/*
+#define FILE_ATTRIBUTE_READONLY             0x00000001  
+#define FILE_ATTRIBUTE_HIDDEN               0x00000002  
+#define FILE_ATTRIBUTE_SYSTEM               0x00000004  
+#define FILE_ATTRIBUTE_DIRECTORY            0x00000010  
+#define FILE_ATTRIBUTE_ARCHIVE              0x00000020  
+#define FILE_ATTRIBUTE_DEVICE               0x00000040  
+#define FILE_ATTRIBUTE_NORMAL               0x00000080  
+#define FILE_ATTRIBUTE_TEMPORARY            0x00000100  
+#define FILE_ATTRIBUTE_SPARSE_FILE          0x00000200  
+#define FILE_ATTRIBUTE_REPARSE_POINT        0x00000400  
+#define FILE_ATTRIBUTE_COMPRESSED           0x00000800  
+#define FILE_ATTRIBUTE_OFFLINE              0x00001000  
+#define FILE_ATTRIBUTE_NOT_CONTENT_INDEXED  0x00002000  
+#define FILE_ATTRIBUTE_ENCRYPTED            0x00004000  
+#define FILE_ATTRIBUTE_INTEGRITY_STREAM     0x00008000  
+#define FILE_ATTRIBUTE_VIRTUAL              0x00010000  
+#define FILE_ATTRIBUTE_NO_SCRUB_DATA        0x00020000  
+
+				*/
+				wprintf( L"Attributes for file: %s\r\n", some_name.c_str( ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_READONLY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_READONLY ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_HIDDEN", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_HIDDEN ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_SYSTEM", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_SYSTEM ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_DIRECTORY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_ARCHIVE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_ARCHIVE ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_DEVICE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DEVICE ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_NORMAL", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NORMAL ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_TEMPORARY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_TEMPORARY ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_SPARSE_FILE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_SPARSE_FILE ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_REPARSE_POINT", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_COMPRESSED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_OFFLINE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_OFFLINE ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_NOT_CONTENT_INDEXED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_ENCRYPTED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_ENCRYPTED ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_INTEGRITY_STREAM", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_INTEGRITY_STREAM ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_VIRTUAL", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_VIRTUAL ) ? L"YES" : L"NO" ) );
+				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_NO_SCRUB_DATA", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NO_SCRUB_DATA ) ? L"YES" : L"NO" ) );
+
+				//_CrtDbgBreak( );
+				}
+			}
+		}
+		++numItems;
+		if ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) || writeToScreen ) {//I'd like to avoid building a null terminated string unless it is necessary
+			fNameVect.clear( );
+			fNameVect.reserve( ( pFileInf->FileNameLength / sizeof( WCHAR ) ) + 1 );
+			PWCHAR end = pFileInf->FileName + ( pFileInf->FileNameLength / sizeof( WCHAR ) );
+			fNameVect.insert( fNameVect.end( ), pFileInf->FileName, end );
+			fNameVect.emplace_back( L'\0' );
+			PWSTR fNameChar = &( fNameVect[ 0 ] );
+			
+			if ( writeToScreen ) {
+
+				//std::wcout << std::setw( std::numeric_limits<LONGLONG>::digits10 ) << pFileInf->FileId.QuadPart << L"    " << std::setw( 0 ) << curDir << L"\\" << fNameChar;
+				//wprintf( L"%I64d    %s\\%s\r\n", std::int64_t( pFileInf->FileId.QuadPart ), curDir.c_str( ), fNameChar );
+				if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED ) {
+					wprintf( L"AllocationSize: %I64d    %s\\%s\r\n", std::int64_t( pFileInf->AllocationSize.QuadPart ), dir.c_str( ), fNameChar );
+					}
+
+				//auto state = std::wcout.fail( );
+				//if ( state != 0 ) {
+				//	std::wcout.clear( );
+				//	std::wcout << std::endl << L"std::wcout.fail( ): " << state << std::endl;
+				//	}
+				}
+			if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
+
+				if ( dir[ dir.length( ) - 1 ] != L'\\' ) {
+					//breadthDirs.emplace_back( std::wstring( curDir ) + L'\\' + fNameChar + L'\\' );
+					auto query = std::wstring( dir + L'\\' + fNameChar + L'\\' );
+					//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
+					puts("Imagine we're descending...\r\n");
+					}
+				else {
+					//breadthDirs.emplace_back( std::wstring( curDir ) + fNameChar + L'\\' );
+					auto query = std::wstring( dir + fNameChar + L'\\' );
+					//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
+					puts("Imagine we're descending...\r\n");
+					}
+				//std::wstring dirstr = curDir + L"\\" + fNameChar + L"\\";
+				//breadthDirs.emplace_back( dirstr );
+				//numItems += ListDirectory( dirstr.c_str( ), dirs, idInfo, writeToScreen );
+				}
+			}
+
+	nextItem:
+		//stat = NtQueryDirectoryFile( hDir, NULL, NULL, NULL, &iosb, &idInfo[ 0 ], idInfo.size( ), FileIdBothDirectoryInformation, TRUE, NULL, FALSE );
+		if ( writeToScreen ) {
+			wprintf( L"\t\tpFileInf: %p, pFileInf->NextEntryOffset: %lu, ( pFileInf + pFileInf->NextEntryOffset ): %p\r\n", pFileInf, pFileInf->NextEntryOffset, ( pFileInf + pFileInf->NextEntryOffset ) );
+			//std::wcout << L"\t\tpFileInf: " << pFileInf << L", pFileInf->NextEntryOffset: " << pFileInf->NextEntryOffset << L", pFileInf + pFileInf->NextEntryOffset " << ( pFileInf + pFileInf->NextEntryOffset ) << std::endl;
+			}
+		pFileInf = ( pFileInf->NextEntryOffset != 0 ) ? reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>( reinterpret_cast<std::uint64_t>( pFileInf ) + ( static_cast<std::uint64_t>( pFileInf->NextEntryOffset ) ) ) : NULL;
+		}
+
 
 	//UNICODE_STRING path = {};
 	//RTL_RELATIVE_NAME rtl_rel_name = {};
