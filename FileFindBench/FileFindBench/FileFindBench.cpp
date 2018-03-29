@@ -175,9 +175,8 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 		{
 		const std::wstring this_file_name( pFileInf->FileName, ( pFileInf->FileNameLength / sizeof( WCHAR ) ) );
 		const std::wstring some_name( dir + L'\\' + this_file_name );
-		const auto comp_file_size = GetCompressedFileSize_filename( some_name );
 		if ( !( pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) ) {
-			if ( writeToScreen && !( std::uint64_t( pFileInf->AllocationSize.QuadPart ) == comp_file_size ) ) {
+			if ( writeToScreen ) {
 				/*
 #define FILE_ATTRIBUTE_READONLY             0x00000001  
 #define FILE_ATTRIBUTE_HIDDEN               0x00000002  
@@ -199,25 +198,10 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 
 				*/
 				wprintf( L"Attributes for file: %s\r\n", some_name.c_str( ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_READONLY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_READONLY ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_HIDDEN", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_HIDDEN ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_SYSTEM", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_SYSTEM ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_DIRECTORY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_ARCHIVE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_ARCHIVE ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_DEVICE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DEVICE ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_NORMAL", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NORMAL ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_TEMPORARY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_TEMPORARY ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_SPARSE_FILE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_SPARSE_FILE ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_REPARSE_POINT", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_COMPRESSED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_OFFLINE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_OFFLINE ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_NOT_CONTENT_INDEXED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_ENCRYPTED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_ENCRYPTED ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_INTEGRITY_STREAM", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_INTEGRITY_STREAM ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_VIRTUAL", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_VIRTUAL ) ? L"YES" : L"NO" ) );
-				wprintf( L"%s: %s\r\n", L"FILE_ATTRIBUTE_NO_SCRUB_DATA", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NO_SCRUB_DATA ) ? L"YES" : L"NO" ) );
-
-				//_CrtDbgBreak( );
+				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_DIRECTORY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) ? L"YES" : L"NO" ) );
+				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_DEVICE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DEVICE ) ? L"YES" : L"NO" ) );
+				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_NORMAL", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NORMAL ) ? L"YES" : L"NO" ) );
+				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_COMPRESSED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED ) ? L"YES" : L"NO" ) );
 				}
 			}
 		}
