@@ -38,6 +38,7 @@
 #include <vector>
 #include <cassert>
 #include <future>
+//#include <ntstatus.h>
 #include <winternl.h>
 #include <stdio.h>
 
