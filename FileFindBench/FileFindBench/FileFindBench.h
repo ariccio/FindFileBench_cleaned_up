@@ -121,7 +121,7 @@ RtlReleaseRelativeName_t) (
 
 
 struct NtdllWrap {
-	HMODULE ntdll = nullptr;
+	HMODULE hntdll = nullptr;
 	//FARPROC ntQueryDirectoryFuncPtr = nullptr;
 
 	NtQueryDirectoryFile_t NtQueryDirectoryFile_f;
@@ -367,3 +367,5 @@ typedef struct _REPARSE_DATA_BUFFER {
 // The data was too large to fit into the specified buffer.
 //
 #define STATUS_BUFFER_OVERFLOW           ((NTSTATUS)0x80000005L)
+
+void qDirRecursive( const std::wstring &dir );
