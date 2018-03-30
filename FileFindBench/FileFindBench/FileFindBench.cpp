@@ -8,44 +8,48 @@ void test( _Post_ptr_invalid_ HANDLE){}
 NtdllWrap::NtdllWrap( ) {
 	ntdll = ::GetModuleHandleW( L"C:\\Windows\\System32\\ntdll.dll" );
 	if ( !ntdll) {
-		::fwprintf( stderr, L"Couldn't load ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't load ntdll.dll!\r\n" );
 		std::terminate( );
 		}
 	NtQueryDirectoryFile_f = reinterpret_cast<NtQueryDirectoryFile_t>( ::GetProcAddress( ntdll, "NtQueryDirectoryFile" ) );
 	if ( !NtQueryDirectoryFile_f ) {
-		::fwprintf( stderr, L"Couldn't find NtQueryDirectoryFile in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find NtQueryDirectoryFile in ntdll.dll!\r\n" );
 		}
 	RtlDosPathNameToNtPathName_U_WithStatus_f = reinterpret_cast<RTL_DOS_PATH_NAME_TO_NT_PATH_NAME_U_WITHSTATUS>( ::GetProcAddress( ntdll, "RtlDosPathNameToNtPathName_U_WithStatus" ) );
 	if ( !RtlDosPathNameToNtPathName_U_WithStatus_f ) {
-		::fwprintf( stderr, L"Couldn't find RtlDosPathNameToNtPathName_U_WithStatus in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find RtlDosPathNameToNtPathName_U_WithStatus in ntdll.dll!\r\n" );
 		}
 	RtlIsDosDeviceName_U_f = reinterpret_cast<RtlIsDosDeviceName_U_t>( ::GetProcAddress( ntdll, "RtlIsDosDeviceName_U" ) );
 	if ( !RtlIsDosDeviceName_U_f ) {
-		::fwprintf( stderr, L"Couldn't find RtlIsDosDeviceName_U in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find RtlIsDosDeviceName_U in ntdll.dll!\r\n" );
 		}
 
 	RtlAppendUnicodeStringToString_f = reinterpret_cast<RtlAppendUnicodeStringToString_t>( ::GetProcAddress( ntdll, "RtlAppendUnicodeStringToString" ) );
 	if ( !RtlAppendUnicodeStringToString_f ) {
-		::fwprintf( stderr, L"Couldn't find RtlAppendUnicodeStringToString in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find RtlAppendUnicodeStringToString in ntdll.dll!\r\n" );
 		}
 	RtlAppendUnicodeToString_f = reinterpret_cast<RtlAppendUnicodeToString_t>( ::GetProcAddress( ntdll, "RtlAppendUnicodeToString" ) );
 	if ( !RtlAppendUnicodeToString_f ) {
-		::fwprintf( stderr, L"Couldn't find RtlAppendUnicodeToString_f in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find RtlAppendUnicodeToString_f in ntdll.dll!\r\n" );
 		}
 
 	NtOpenFile_f = reinterpret_cast<NtOpenFile_t>( ::GetProcAddress( ntdll, "NtOpenFile" ) );
 	if ( !NtOpenFile_f ) {
-		::fwprintf( stderr, L"Couldn't find NtOpenFile in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find NtOpenFile in ntdll.dll!\r\n" );
 		}
 	NtClose_f = reinterpret_cast<NtClose_t>( ::GetProcAddress( ntdll, "NtClose" ) );
 	if ( !NtClose_f ) {
-		::fwprintf( stderr, L"Couldn't find NtClose in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find NtClose in ntdll.dll!\r\n" );
 		}
 
 	NtCreateFile_f = reinterpret_cast<NtCreateFile_t>( ::GetProcAddress( ntdll, "NtCreateFile" ) );
 	if ( !NtClose_f ) {
-		::fwprintf( stderr, L"Couldn't find NtCreateFile in ntdll.dll!\r\n" );
+		::fwprintf_s( stderr, L"Couldn't find NtCreateFile in ntdll.dll!\r\n" );
 		}
+	RtlReleaseRelativeName_f = reinterpret_cast<RtlReleaseRelativeName_t>( ::GetProcAddress( ntdll, "RtlReleaseRelativeName" ) );
+	if ( !RtlReleaseRelativeName_f ) {
+		::fwprintf_s(stderr, L"Couldn't find RtlReleaseRelativeName in ntdll.dll!\r\n");
+		} 
 	}
 
 std::wstring handyDandyErrMsgFormatter( ) {
@@ -69,15 +73,15 @@ std::uint64_t GetCompressedFileSize_filename( const std::wstring path ) {
 	if ( ret.LowPart == INVALID_FILE_SIZE ) {
 		if ( ret.HighPart != NULL ) {
 			if ( ( last_err != NO_ERROR ) && ( last_err != last_err_old ) ) {
-				fwprintf( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+				::fwprintf_s( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
 				return UINT64_MAX;// IN case of an error return size from CFileFind object
 				}
-			fwprintf( stderr, L"WTF ERROR! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+			::fwprintf_s( stderr, L"WTF ERROR! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
 			return UINT64_MAX;
 			}
 		else {
 			if ( ( last_err != NO_ERROR ) && ( last_err != last_err_old ) ) {
-				fwprintf( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+				::fwprintf_s( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
 				return UINT64_MAX;
 				}
 			return ret.QuadPart;
@@ -86,6 +90,41 @@ std::uint64_t GetCompressedFileSize_filename( const std::wstring path ) {
 	return ret.QuadPart;
 	}
 
+	//I do this to ensure there are NO issues with incorrectly sized buffers or mismatching parameters (or any other bad changes)
+constexpr FILE_INFORMATION_CLASS InfoClass = FileDirectoryInformation;
+typedef FILE_DIRECTORY_INFORMATION THIS_FILE_INFORMATION_CLASS;
+typedef THIS_FILE_INFORMATION_CLASS* PTHIS_FILE_INFORMATION_CLASS;
+
+
+void displayInfo( const THIS_FILE_INFORMATION_CLASS* const pFileInf, const std::wstring &dir ) {
+	const std::wstring this_file_name( pFileInf->FileName, (pFileInf->FileNameLength / sizeof( WCHAR )) );
+	const std::wstring some_name( dir + L'\\' + this_file_name );
+	if ( !(pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ) {
+		if ( writeToScreen ) {
+			::wprintf_s( L"Attributes for file: %s\r\n", some_name.c_str( ) );
+			::wprintf_s( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_DIRECTORY", ((pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? L"YES" : L"NO") );
+			::wprintf_s( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_DEVICE", ((pFileInf->FileAttributes & FILE_ATTRIBUTE_DEVICE) ? L"YES" : L"NO") );
+			::wprintf_s( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_NORMAL", ((pFileInf->FileAttributes & FILE_ATTRIBUTE_NORMAL) ? L"YES" : L"NO") );
+			::wprintf_s( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_COMPRESSED", ((pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED) ? L"YES" : L"NO") );
+			}
+		}
+	}
+
+constexpr rsize_t FileDirectoryInformationFileNameRequiredBufferCountWithNull( const FILE_DIRECTORY_INFORMATION* const pFileInf ) {
+	return ( pFileInf->FileNameLength / sizeof( WCHAR ) ) + 1;
+	}
+
+constexpr PCWCHAR FileDirectoryInformationFileNameEndPointer( const FILE_DIRECTORY_INFORMATION* const pFileInf ) {
+	return pFileInf->FileName + ( pFileInf->FileNameLength / sizeof( WCHAR ) );
+	}
+
+void writeCompressedFileSizeInfoToScreen( const THIS_FILE_INFORMATION_CLASS* const pFileInf, const std::wstring &dir, const PCWSTR &fNameChar )
+{
+	//wprintf_s( L"%I64d    %s\\%s\r\n", std::int64_t( pFileInf->FileId.QuadPart ), curDir.c_str( ), fNameChar );
+	if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED ) {
+		::wprintf_s( L"AllocationSize: %I64d    %s\\%s\r\n", std::int64_t( pFileInf->AllocationSize.QuadPart ), dir.c_str( ), fNameChar );
+	}
+}
 
 void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	NtdllWrap ntdll;
@@ -97,13 +136,9 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	const HANDLE nt_dir_handle = ::CreateFileW(dir.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OVERLAPPED, NULL);
 	if ( nt_dir_handle == INVALID_HANDLE_VALUE ) {
 		const DWORD err = ::GetLastError( );
-		::fwprintf( stderr, L"Failed to open directory %s because of error %lu\r\n", dir.c_str( ), err );
-		::fwprintf( stderr, L"err: `%lu` means: %s\r\n", err, handyDandyErrMsgFormatter( ).c_str( ) );
+		::fwprintf_s( stderr, L"Failed to open directory %s because of error %lu\r\n", dir.c_str( ), err );
+		::fwprintf_s( stderr, L"err: `%lu` means: %s\r\n", err, handyDandyErrMsgFormatter( ).c_str( ) );
 		}
-	//I do this to ensure there are NO issues with incorrectly sized buffers or mismatching parameters (or any other bad changes)
-	const FILE_INFORMATION_CLASS InfoClass = FileDirectoryInformation;
-	typedef FILE_DIRECTORY_INFORMATION THIS_FILE_INFORMATION_CLASS;
-	typedef THIS_FILE_INFORMATION_CLASS* PTHIS_FILE_INFORMATION_CLASS;
 
 	
 	const ULONG init_bufSize = ( ( sizeof( FILE_ID_BOTH_DIR_INFORMATION ) + ( MAX_PATH * sizeof( wchar_t ) ) ) * 100 );
@@ -111,6 +146,7 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	ULONG bufSize = init_bufSize;
 	std::unique_ptr<__declspec( align( 8 ) ) wchar_t[]> idInfo;
 	idInfo = std::make_unique<__declspec( align( 8 ) ) wchar_t[]>(init_bufSize);
+	::wmemset(idInfo.get(), 0, init_bufSize);
 
 	std::vector<std::wstring> breadthDirs;
 	std::vector<WCHAR> fNameVect;
@@ -122,8 +158,8 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	//UNICODE_STRING _glob;
 	
 	NTSTATUS query_directory_result = STATUS_PENDING;
-	wprintf( L"Files in directory %s\r\n", dir.c_str( ) );
-	wprintf( L"      File ID       |       File Name\r\n" );
+	::wprintf_s( L"Files in directory %s\r\n", dir.c_str( ) );
+	::wprintf_s( L"      File ID       |       File Name\r\n" );
 	assert( init_bufSize > 1 );
 	//auto buffer = &( idInfo[ 0 ] );
 	//++numItems;
@@ -149,20 +185,20 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	const ULONG_PTR bufSizeWritten = iosb.Information;
 
 	
-	//This zeros just enough of the idInfo buffer ( after the end of valid data ) to halt the forthcoming while loop at the last valid data. This saves the effort of zeroing larger parts of the buffer.
-	for ( size_t i = bufSizeWritten; i < bufSizeWritten + ( sizeof( THIS_FILE_INFORMATION_CLASS ) + ( MAX_PATH * sizeof( wchar_t ) ) * 2 ); ++i ) {
-		assert( i < bufSize );
-		idInfo[ i ] = 0;
-		}
+	////This zeros just enough of the idInfo buffer ( after the end of valid data ) to halt the forthcoming while loop at the last valid data. This saves the effort of zeroing larger parts of the buffer.
+	//for ( size_t i = bufSizeWritten; i < bufSizeWritten + ( sizeof( THIS_FILE_INFORMATION_CLASS ) + ( MAX_PATH * sizeof( wchar_t ) ) * 2 ); ++i ) {
+	//	assert( i < bufSize );
+	//	assert( idInfo[ i ] == 0 );
+	//	idInfo[ i ] = 0;
+	//	}
 
 	
 	const ULONG_PTR count_records = bufSizeWritten / sizeof( THIS_FILE_INFORMATION_CLASS );
-	PTHIS_FILE_INFORMATION_CLASS pFileInf = reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>( idInfo.get( ) );
+	const THIS_FILE_INFORMATION_CLASS* pFileInf = reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>( idInfo.get( ) );
 
 
 	assert( pFileInf != NULL );
 	while ( NT_SUCCESS( query_directory_result ) && ( pFileInf != NULL ) ) {
-		//PFILE_ID_BOTH_DIR_INFORMATION pFileInf = ( FILE_ID_BOTH_DIR_INFORMATION* ) buffer;
 
 		assert( pFileInf->FileNameLength > 1 );
 		if ( pFileInf->FileName[ 0 ] == L'.' && ( pFileInf->FileName[ 1 ] == 0 || ( pFileInf->FileName[ 1 ] == '.' ) ) ) {
@@ -172,61 +208,21 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 
 		total_size += pFileInf->AllocationSize.QuadPart;
 		//const auto lores = GetCompressedFileSizeW( , ) 
-		{
-		const std::wstring this_file_name( pFileInf->FileName, ( pFileInf->FileNameLength / sizeof( WCHAR ) ) );
-		const std::wstring some_name( dir + L'\\' + this_file_name );
-		if ( !( pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) ) {
-			if ( writeToScreen ) {
-				/*
-#define FILE_ATTRIBUTE_READONLY             0x00000001  
-#define FILE_ATTRIBUTE_HIDDEN               0x00000002  
-#define FILE_ATTRIBUTE_SYSTEM               0x00000004  
-#define FILE_ATTRIBUTE_DIRECTORY            0x00000010  
-#define FILE_ATTRIBUTE_ARCHIVE              0x00000020  
-#define FILE_ATTRIBUTE_DEVICE               0x00000040  
-#define FILE_ATTRIBUTE_NORMAL               0x00000080  
-#define FILE_ATTRIBUTE_TEMPORARY            0x00000100  
-#define FILE_ATTRIBUTE_SPARSE_FILE          0x00000200  
-#define FILE_ATTRIBUTE_REPARSE_POINT        0x00000400  
-#define FILE_ATTRIBUTE_COMPRESSED           0x00000800  
-#define FILE_ATTRIBUTE_OFFLINE              0x00001000  
-#define FILE_ATTRIBUTE_NOT_CONTENT_INDEXED  0x00002000  
-#define FILE_ATTRIBUTE_ENCRYPTED            0x00004000  
-#define FILE_ATTRIBUTE_INTEGRITY_STREAM     0x00008000  
-#define FILE_ATTRIBUTE_VIRTUAL              0x00010000  
-#define FILE_ATTRIBUTE_NO_SCRUB_DATA        0x00020000  
-
-				*/
-				wprintf( L"Attributes for file: %s\r\n", some_name.c_str( ) );
-				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_DIRECTORY", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) ? L"YES" : L"NO" ) );
-				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_DEVICE", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DEVICE ) ? L"YES" : L"NO" ) );
-				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_NORMAL", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_NORMAL ) ? L"YES" : L"NO" ) );
-				wprintf( L"\t%s: %s\r\n", L"FILE_ATTRIBUTE_COMPRESSED", ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED ) ? L"YES" : L"NO" ) );
-				}
-			}
-		}
+		displayInfo( pFileInf, dir );
+		
 		++numItems;
 		if ( ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) || writeToScreen ) {//I'd like to avoid building a null terminated string unless it is necessary
 			fNameVect.clear( );
-			fNameVect.reserve( ( pFileInf->FileNameLength / sizeof( WCHAR ) ) + 1 );
-			PWCHAR end = pFileInf->FileName + ( pFileInf->FileNameLength / sizeof( WCHAR ) );
+			fNameVect.reserve( FileDirectoryInformationFileNameRequiredBufferCountWithNull( pFileInf ) );
+			
+			PCWCHAR const end = pFileInf->FileName + ( pFileInf->FileNameLength / sizeof( WCHAR ) );
 			fNameVect.insert( fNameVect.end( ), pFileInf->FileName, end );
 			fNameVect.emplace_back( L'\0' );
-			PWSTR fNameChar = &( fNameVect[ 0 ] );
+			PCWSTR const fNameChar = &( fNameVect[ 0 ] );
+			
 			
 			if ( writeToScreen ) {
-
-				//std::wcout << std::setw( std::numeric_limits<LONGLONG>::digits10 ) << pFileInf->FileId.QuadPart << L"    " << std::setw( 0 ) << curDir << L"\\" << fNameChar;
-				//wprintf( L"%I64d    %s\\%s\r\n", std::int64_t( pFileInf->FileId.QuadPart ), curDir.c_str( ), fNameChar );
-				if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED ) {
-					wprintf( L"AllocationSize: %I64d    %s\\%s\r\n", std::int64_t( pFileInf->AllocationSize.QuadPart ), dir.c_str( ), fNameChar );
-					}
-
-				//auto state = std::wcout.fail( );
-				//if ( state != 0 ) {
-				//	std::wcout.clear( );
-				//	std::wcout << std::endl << L"std::wcout.fail( ): " << state << std::endl;
-				//	}
+				writeCompressedFileSizeInfoToScreen( pFileInf, dir, fNameChar );
 				}
 			if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
 
@@ -234,13 +230,13 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 					//breadthDirs.emplace_back( std::wstring( curDir ) + L'\\' + fNameChar + L'\\' );
 					auto query = std::wstring( dir + L'\\' + fNameChar + L'\\' );
 					//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
-					puts("Imagine we're descending...\r\n");
+					::puts("Imagine we're descending...\r\n");
 					}
 				else {
 					//breadthDirs.emplace_back( std::wstring( curDir ) + fNameChar + L'\\' );
 					auto query = std::wstring( dir + fNameChar + L'\\' );
 					//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
-					puts("Imagine we're descending...\r\n");
+					::puts("Imagine we're descending...\r\n");
 					}
 				//std::wstring dirstr = curDir + L"\\" + fNameChar + L"\\";
 				//breadthDirs.emplace_back( dirstr );
@@ -251,10 +247,15 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	nextItem:
 		//stat = NtQueryDirectoryFile( hDir, NULL, NULL, NULL, &iosb, &idInfo[ 0 ], idInfo.size( ), FileIdBothDirectoryInformation, TRUE, NULL, FALSE );
 		if ( writeToScreen ) {
-			wprintf( L"\t\tpFileInf: %p, pFileInf->NextEntryOffset: %lu, ( pFileInf + pFileInf->NextEntryOffset ): %p\r\n", pFileInf, pFileInf->NextEntryOffset, ( pFileInf + pFileInf->NextEntryOffset ) );
-			//std::wcout << L"\t\tpFileInf: " << pFileInf << L", pFileInf->NextEntryOffset: " << pFileInf->NextEntryOffset << L", pFileInf + pFileInf->NextEntryOffset " << ( pFileInf + pFileInf->NextEntryOffset ) << std::endl;
+			::wprintf_s( L"\t\tpFileInf: %p, pFileInf->NextEntryOffset: %lu, ( pFileInf + pFileInf->NextEntryOffset ): %p\r\n", pFileInf, pFileInf->NextEntryOffset, ( pFileInf + pFileInf->NextEntryOffset ) );
 			}
-		pFileInf = ( pFileInf->NextEntryOffset != 0 ) ? reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>( reinterpret_cast<std::uint64_t>( pFileInf ) + ( static_cast<std::uint64_t>( pFileInf->NextEntryOffset ) ) ) : NULL;
+		if ( pFileInf->NextEntryOffset != 0 ) {
+			const std::uintptr_t address_of_next_entry = reinterpret_cast<std::uintptr_t>( pFileInf ) + static_cast<std::uintptr_t>( pFileInf->NextEntryOffset );
+			pFileInf = reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>( address_of_next_entry );
+			}
+		else {
+			pFileInf = nullptr;
+			}
 		}
 
 
@@ -264,13 +265,13 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	////::RtlInitUnicodeString(&path, dir.c_str());
 	//const NTSTATUS conversion_result = ntdll.RtlDosPathNameToNtPathName_U_WithStatus_f(raw_dir.c_str(), &path, &ntpart, &rtl_rel_name);
 	//if ( !NT_SUCCESS( conversion_result ) ) {
-	//	fwprintf( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus failed!\r\n" );
+	//	fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus failed!\r\n" );
 	//	std::terminate();
 	//	}
 
 	//const ULONG is_dos_device = ntdll.RtlIsDosDeviceName_U_f( raw_dir.c_str( ) );
 	//if ( is_dos_device ) {
-	//	fwprintf( stderr, L"'%s' (ntpart) is a DOS device!\r\n", ntpart );
+	//	fwprintf_s( stderr, L"'%s' (ntpart) is a DOS device!\r\n", ntpart );
 	//	std::terminate();
 	//	}
 	//HANDLE nt_dir_handle = INVALID_HANDLE_VALUE;
@@ -284,7 +285,7 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 
 
 	//if ( !NT_SUCCESS( open_result ) ) {
-		//fwprintf( stderr, L"NtOpenFile failed!\r\n" );
+		//fwprintf_s( stderr, L"NtOpenFile failed!\r\n" );
 		//std::terminate();
 		//}
 	//NtQueryDirectory
@@ -322,21 +323,21 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 		*/
 	//NTSTATUS const close_result = ntdll.NtClose_f(nt_dir_handle);
 	//if (!NT_SUCCESS( close_result ) ) {
-	//	fwprintf( stderr, L"Closing handle nt_dir_handle (%p) failed!\r\n\tResult code: %li\r\n", nt_dir_handle, close_result );
+	//	fwprintf_s( stderr, L"Closing handle nt_dir_handle (%p) failed!\r\n\tResult code: %li\r\n", nt_dir_handle, close_result );
 	//	}
 
-
-	return ;
+	::wprintf_s(L"Total number of files: %I64u\r\n", numItems);
+	return;
 	}
 
 int wmain( int argc,  _Readable_elements_( argc ) WCHAR* argv[ ], WCHAR*[ ] ) {
 	if ( argc < 2 ) {
-		puts("Need more than 1 argument!\r\n");
+		::puts("Need more than 1 argument!\r\n");
 		return ERROR_BAD_ARGUMENTS;
 		}
 	//for ( uint32_t i = 0; i < ( UINT32_MAX - 2 ); ++i) {
 		stdRecurseFindFutures(std::wstring(argv[1]));
 		//}
-	puts("---------------------\r\n");
+	::puts("---------------------\r\n");
 	return 0;
 	}

@@ -113,6 +113,12 @@ RtlAppendUnicodeToString_t) (
     _In_opt_z_ PCWSTR Source
     );
 
+typedef NTSYSAPI
+NTSTATUS
+(NTAPI*
+RtlReleaseRelativeName_t) (
+	_Post_ptr_invalid_ PRTL_RELATIVE_NAME prtn);
+
 
 struct NtdllWrap {
 	HMODULE ntdll = nullptr;
@@ -123,9 +129,11 @@ struct NtdllWrap {
 	RtlIsDosDeviceName_U_t RtlIsDosDeviceName_U_f;
 	RtlAppendUnicodeStringToString_t RtlAppendUnicodeStringToString_f;
 	RtlAppendUnicodeToString_t RtlAppendUnicodeToString_f;
+	RtlReleaseRelativeName_t RtlReleaseRelativeName_f;
 	NtOpenFile_t NtOpenFile_f;
 	NtCreateFile_t NtCreateFile_f;
 	NtClose_t NtClose_f;
+
 	NtdllWrap( );
 	NtdllWrap( NtdllWrap& in ) = delete;
 	};
@@ -157,7 +165,7 @@ typedef struct _FILE_DIRECTORY_INFORMATION {
     LARGE_INTEGER AllocationSize;
     ULONG FileAttributes;
     ULONG FileNameLength;
-    WCHAR FileName[1];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_DIRECTORY_INFORMATION, *PFILE_DIRECTORY_INFORMATION;
 
 typedef struct _FILE_FULL_DIR_INFORMATION {
@@ -172,7 +180,7 @@ typedef struct _FILE_FULL_DIR_INFORMATION {
     ULONG FileAttributes;
     ULONG FileNameLength;
     ULONG EaSize;
-    WCHAR FileName[1];
+    _Field_size_bytes_( FileNameLength ) WCHAR FileName[1];
 } FILE_FULL_DIR_INFORMATION, *PFILE_FULL_DIR_INFORMATION;
 
 typedef struct _FILE_ID_FULL_DIR_INFORMATION {
@@ -188,7 +196,7 @@ typedef struct _FILE_ID_FULL_DIR_INFORMATION {
     ULONG FileNameLength;
     ULONG EaSize;
     LARGE_INTEGER FileId;
-    WCHAR FileName[1];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_ID_FULL_DIR_INFORMATION, *PFILE_ID_FULL_DIR_INFORMATION;
 
 typedef struct _FILE_BOTH_DIR_INFORMATION {
@@ -204,8 +212,8 @@ typedef struct _FILE_BOTH_DIR_INFORMATION {
     ULONG FileNameLength;
     ULONG EaSize;
     CCHAR ShortNameLength;
-    WCHAR ShortName[12];
-    WCHAR FileName[1];
+    _Field_size_bytes_part_(sizeof(ShortName), ShortNameLength) WCHAR ShortName[12];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_BOTH_DIR_INFORMATION, *PFILE_BOTH_DIR_INFORMATION;
 
 typedef struct _FILE_ID_BOTH_DIR_INFORMATION {
@@ -221,16 +229,16 @@ typedef struct _FILE_ID_BOTH_DIR_INFORMATION {
     ULONG FileNameLength;
     ULONG EaSize;
     CCHAR ShortNameLength;
-    WCHAR ShortName[12];
+    _Field_size_bytes_part_(sizeof(ShortName), ShortNameLength) WCHAR ShortName[12];
     LARGE_INTEGER FileId;
-    WCHAR FileName[1];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_ID_BOTH_DIR_INFORMATION, *PFILE_ID_BOTH_DIR_INFORMATION;
 
 typedef struct _FILE_NAMES_INFORMATION {
     ULONG NextEntryOffset;
     ULONG FileIndex;
     ULONG FileNameLength;
-    WCHAR FileName[1];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_NAMES_INFORMATION, *PFILE_NAMES_INFORMATION;
 
 typedef struct _FILE_ID_GLOBAL_TX_DIR_INFORMATION {
@@ -247,7 +255,7 @@ typedef struct _FILE_ID_GLOBAL_TX_DIR_INFORMATION {
     LARGE_INTEGER FileId;
     GUID LockingTransactionId;
     ULONG TxInfoFlags;
-    WCHAR FileName[1];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_ID_GLOBAL_TX_DIR_INFORMATION, *PFILE_ID_GLOBAL_TX_DIR_INFORMATION;
 
 #define FILE_ID_GLOBAL_TX_DIR_INFO_FLAG_WRITELOCKED         0x00000001
@@ -268,7 +276,7 @@ typedef struct _FILE_ID_EXTD_DIR_INFORMATION {
     ULONG EaSize;
     ULONG ReparsePointTag;
     FILE_ID_128 FileId;
-    WCHAR FileName[1];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_ID_EXTD_DIR_INFORMATION, *PFILE_ID_EXTD_DIR_INFORMATION;
 
 typedef struct _FILE_ID_EXTD_BOTH_DIR_INFORMATION {
@@ -286,8 +294,8 @@ typedef struct _FILE_ID_EXTD_BOTH_DIR_INFORMATION {
     ULONG ReparsePointTag;
     FILE_ID_128 FileId;
     CCHAR ShortNameLength;
-    WCHAR ShortName[12];
-    WCHAR FileName[1];
+    _Field_size_bytes_part_(sizeof(ShortName), ShortNameLength) WCHAR ShortName[12];
+    _Field_size_bytes_(FileNameLength) WCHAR FileName[1];
 } FILE_ID_EXTD_BOTH_DIR_INFORMATION, *PFILE_ID_EXTD_BOTH_DIR_INFORMATION;
 
 #if _MSC_VER >= 1200
@@ -317,7 +325,7 @@ typedef struct _REPARSE_DATA_BUFFER {
     USHORT ReparseDataLength;
     USHORT Reserved;
     union {
-        struct {
+        _Struct_size_bytes_(ReparseDataLength) struct {
             USHORT SubstituteNameOffset;
             USHORT SubstituteNameLength;
             USHORT PrintNameOffset;
@@ -325,14 +333,14 @@ typedef struct _REPARSE_DATA_BUFFER {
             ULONG Flags;
             WCHAR PathBuffer[1];
         } SymbolicLinkReparseBuffer;
-        struct {
+        _Struct_size_bytes_(ReparseDataLength) struct {
             USHORT SubstituteNameOffset;
             USHORT SubstituteNameLength;
             USHORT PrintNameOffset;
             USHORT PrintNameLength;
             WCHAR PathBuffer[1];
         } MountPointReparseBuffer;
-        struct {
+        _Struct_size_bytes_(ReparseDataLength) struct {
             UCHAR  DataBuffer[1];
         } GenericReparseBuffer;
     } DUMMYUNIONNAME;
