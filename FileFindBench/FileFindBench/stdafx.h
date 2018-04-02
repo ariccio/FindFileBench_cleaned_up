@@ -42,6 +42,8 @@
 //#include <ntstatus.h>
 #include <winternl.h>
 #include <stdio.h>
+#include <queue>
+#include <functional>
 
 #pragma warning(pop)
 

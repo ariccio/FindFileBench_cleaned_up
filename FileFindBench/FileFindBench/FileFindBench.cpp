@@ -5,6 +5,111 @@ constexpr const bool writeToScreen = false;
 
 void test( _Post_ptr_invalid_ HANDLE){}
 
+
+//Kenny Kerr
+template <typename Type, typename Traits>
+class unique_handle {
+	unique_handle( unique_handle const & ) = delete;
+	unique_handle & operator=( unique_handle const & ) = delete;
+	void close( ) noexcept {
+		if ( *this ) {
+			Traits::close( m_value );
+			}
+		}
+	Type m_value;
+public:
+	explicit unique_handle( Type value = Traits::invalid( ) ) nothrow :
+		m_value( value ) { }
+	~unique_handle( ) noexcept {
+		close( );
+		}
+	unique_handle( unique_handle && other ) noexcept :
+		m_value( other.release( ) ) { }
+	unique_handle & operator=( unique_handle && other ) noexcept {
+		reset( other.release( ) );
+		return *this;
+		}
+	struct boolean_struct {
+		//int member;
+		};
+public:
+	Type get( ) const noexcept {
+		return m_value;
+		}
+	bool reset( Type value = Traits::invalid( ) ) noexcept {
+		if ( m_value != value ) {
+			close( );
+			m_value = value;
+			}
+		return *this;
+		}
+	Type release( ) noexcept {
+		auto value = m_value;
+		m_value = Traits::invalid( );
+		return value;
+		}
+};
+
+inline void check_bool( const work& result ) {
+	if ( !result.get() ) {
+		throw check_failed( GetLastError( ) );
+		}
+	}
+
+template <typename T>
+void check( T expected, T actual ) {
+	if ( expected != actual ) {
+		throw check_failed( 0 );
+		}
+	}
+
+struct check_failed {
+	explicit check_failed( long result ) :
+		error( result ) { }
+	long error;
+	};
+
+struct work_traits {
+	static PTP_WORK invalid( ) noexcept {
+		return nullptr;
+		}
+
+	static void close( PTP_WORK value ) noexcept {
+		CloseThreadpoolWork( value );
+		}
+	};
+
+class functional_pool {
+	typedef std::queue<std::function<void( )>> queue;
+
+	queue m_queue;
+	work m_work;
+
+	static void CALLBACK callback( PTP_CALLBACK_INSTANCE, void * context, PTP_WORK ) {
+		auto q = static_cast<queue *>(context);
+		std::function<void( )> function = q->front( );
+		q->pop( );
+		function( );
+		}
+public:
+	functional_pool( ) :
+		m_work( CreateThreadpoolWork( callback, &m_queue, nullptr ) ) {
+		check_bool( m_work );
+		}
+	template <typename Function>
+	void submit( Function const & function ) {
+		m_queue.push( function );
+		SubmitThreadpoolWork( m_work.get( ) );
+		}
+	~functional_pool( ) {
+		WaitForThreadpoolWorkCallbacks( m_work.get( ), true );
+		}
+	};
+
+typedef unique_handle<PTP_WORK, work_traits> work;
+void CALLBACK hard_work(PTP_CALLBACK_INSTANCE, void* context, PTP_WORK);
+void CALLBACK simple_work(PTP_CALLBACK_INSTANCE, void * context);
+
 NtdllWrap::NtdllWrap( ) {
 	hntdll = ::GetModuleHandleW( L"C:\\Windows\\System32\\ntdll.dll" );
 	if ( !hntdll) {
@@ -263,7 +368,21 @@ Directory_recursive_info qDirRecursive( const std::wstring &dir, unsigned int le
 
 
 void stdRecurseFindFutures( const std::wstring raw_dir ) {
-	
+	{
+		void * context = nullptr;
+		work w(CreateThreadpoolWork(hard_work, context, nullptr));
+		check_bool(w);
+
+		SubmitThreadpoolWork(w.get());
+		bool cancel = false;
+		WaitForThreadpoolWorkCallbacks(w.get(), cancel);
+	}
+
+	{
+		void * context = nullptr;
+		check_bool(TrySubmitThreadpoolCallback(
+		simple_work, context, nullptr));
+	}
 	const std::wstring dir = L"\\\\?\\" + raw_dir;
 
 
