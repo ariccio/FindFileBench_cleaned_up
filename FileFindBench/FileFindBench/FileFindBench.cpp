@@ -30,7 +30,7 @@ public:
 		return *this;
 		}
 	struct boolean_struct {
-		//int member;
+		int member;
 		};
 public:
 	Type get( ) const noexcept {
