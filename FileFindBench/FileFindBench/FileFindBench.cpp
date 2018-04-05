@@ -12,13 +12,13 @@ class unique_handle {
 	unique_handle( unique_handle const & ) = delete;
 	unique_handle & operator=( unique_handle const & ) = delete;
 	void close( ) noexcept {
-		if ( *this ) {
+		if ( m_value != Traits::invalid( ) ) {
 			Traits::close( m_value );
 			}
 		}
 	Type m_value;
 public:
-	explicit unique_handle( Type value = Traits::invalid( ) ) nothrow :
+	explicit unique_handle( Type value = Traits::invalid( ) ) noexcept :
 		m_value( value ) { }
 	~unique_handle( ) noexcept {
 		close( );
@@ -44,15 +44,38 @@ public:
 		return *this;
 		}
 	Type release( ) noexcept {
-		auto value = m_value;
+		const auto value = m_value;
 		m_value = Traits::invalid( );
 		return value;
 		}
 };
 
+struct work_traits {
+	static PTP_WORK invalid( ) noexcept {
+		return nullptr;
+		}
+
+	static void close( PTP_WORK value ) noexcept {
+		::CloseThreadpoolWork( value );
+		}
+	};
+
+typedef unique_handle<PTP_WORK, work_traits> work;
+struct check_failed {
+	explicit check_failed( long result ) :
+		error( result ) { }
+	long error;
+	};
+
 inline void check_bool( const work& result ) {
-	if ( !result.get() ) {
-		throw check_failed( GetLastError( ) );
+	if ( !(result.get()) ) {
+		throw check_failed( ::GetLastError( ) );
+		}
+	}
+
+inline void check_bool( const BOOL& result ) {
+	if ( !(result) ) {
+		throw check_failed( ::GetLastError( ) );
 		}
 	}
 
@@ -63,52 +86,73 @@ void check( T expected, T actual ) {
 		}
 	}
 
-struct check_failed {
-	explicit check_failed( long result ) :
-		error( result ) { }
-	long error;
-	};
 
-struct work_traits {
-	static PTP_WORK invalid( ) noexcept {
+
+
+struct pool_traits {
+	static PTP_POOL invalid( ) noexcept {
 		return nullptr;
 		}
 
-	static void close( PTP_WORK value ) noexcept {
-		CloseThreadpoolWork( value );
+	static void close( PTP_POOL pool ) noexcept {
+		::CloseThreadpool( pool );
 		}
 	};
 
-class functional_pool {
-	typedef std::queue<std::function<void( )>> queue;
-
-	queue m_queue;
-	work m_work;
-
-	static void CALLBACK callback( PTP_CALLBACK_INSTANCE, void * context, PTP_WORK ) {
-		auto q = static_cast<queue *>(context);
-		std::function<void( )> function = q->front( );
-		q->pop( );
-		function( );
+struct cleanup_group_traits {
+	static PTP_CLEANUP_GROUP invalid( ) noexcept {
+		return nullptr;
 		}
+
+	static void close( PTP_CLEANUP_GROUP cleanupgroup ) noexcept {
+		::CloseThreadpoolCleanupGroup( cleanupgroup );
+		}
+	};
+
+
+
+template <PTP_WORK_CALLBACK callback, PVOID const context>
+class functional_pool {
+	TP_CALLBACK_ENVIRON CallBackEnviron;
+	work m_work;
+	PTP_CLEANUP_GROUP cleanupgroup;
+	PTP_POOL pool;
+
 public:
-	functional_pool( ) :
-		m_work( CreateThreadpoolWork( callback, &m_queue, nullptr ) ) {
+	functional_pool( ) {
+		::InitializeThreadpoolEnvironment( &CallBackEnviron );
+		pool = ::CreateThreadpool( NULL )
+		if ( NULL == pool ) {
+			wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
+			std::terminate();
+			}
+		cleanupgroup = ::CreateThreadpoolCleanupGroup( );
+		if ( NULL == cleanupgroup ) {
+			wprintf_s( L"CreateThreadpoolCleanupGroup failed. LastError: %u\n", ::GetLastError( ) );
+			std::terminate();
+			}
+
+		// Associate the callback environment with our thread pool.
+		::SetThreadpoolCallbackPool( &CallBackEnviron, pool );
+		::SetThreadpoolCallbackCleanupGroup( &CallBackEnviron, cleanupgroup, NULL );
+
+		m_work = ::CreateThreadpoolWork( callback, context, nullptr )
 		check_bool( m_work );
 		}
-	template <typename Function>
-	void submit( Function const & function ) {
-		m_queue.push( function );
-		SubmitThreadpoolWork( m_work.get( ) );
-		}
+	//template <typename Function>
+	//void submit( Function const & function ) {
+	//	::SubmitThreadpoolWork( m_work.get( ) );
+	//	}
 	~functional_pool( ) {
-		WaitForThreadpoolWorkCallbacks( m_work.get( ), true );
+		::WaitForThreadpoolWorkCallbacks( m_work.get( ), true );
+		::CloseThreadpoolCleanupGroupMembers( cleanupgroup, FALSE, NULL );
+		::CloseThreadpoolCleanupGroup( cleanupgroup );
+		::CloseThreadpool( pool );
 		}
 	};
 
-typedef unique_handle<PTP_WORK, work_traits> work;
-void CALLBACK hard_work(PTP_CALLBACK_INSTANCE, void* context, PTP_WORK);
-void CALLBACK simple_work(PTP_CALLBACK_INSTANCE, void * context);
+void CALLBACK hard_work(PTP_CALLBACK_INSTANCE, void* /*context*/, PTP_WORK) {}
+void CALLBACK simple_work(PTP_CALLBACK_INSTANCE, void * /*context*/) {}
 
 NtdllWrap::NtdllWrap( ) {
 	hntdll = ::GetModuleHandleW( L"C:\\Windows\\System32\\ntdll.dll" );
@@ -246,13 +290,46 @@ struct Directory_recursive_info {
 	std::uint64_t numItems = 0;
 	};
 
-Directory_recursive_info qDirRecursive( const std::wstring &dir, unsigned int level ) {
-	Directory_recursive_info recursive_info{ };
+
+
+struct Directory_ThreadPool_Context {
+	PTP_POOL pool; // Our pool
+	std::wstring dir;
+	unsigned int level;
+	Directory_recursive_info recursive_info;
+};
+
+
+
+void NTAPI qDirRecursive( _Inout_ PTP_CALLBACK_INSTANCE /*Instance*/, _Inout_opt_ __typefix( Directory_ThreadPool_Context) PVOID Context, _Inout_ PTP_WORK /*Work*/ ) {
+	const Directory_ThreadPool_Context* const tp_context = reinterpret_cast<Directory_ThreadPool_Context*>( Context );
+	Directory_ThreadPool_Context* const tp_context_mutable_ptr = reinterpret_cast<Directory_ThreadPool_Context*>( Context );
+	//Directory_recursive_info recursive_info{ };
 
 	HANDLE nt_dir_handle;
-	if ( !openDirectoryHandle( dir, &nt_dir_handle ) ) {
-		return recursive_info;
+	if ( !openDirectoryHandle( tp_context->dir, &nt_dir_handle ) ) {
+		return;
 		}
+
+	TP_CALLBACK_ENVIRON CallBackEnviron;
+	::InitializeThreadpoolEnvironment( &CallBackEnviron );
+
+	// Create a cleanup group for this thread pool.
+	unique_handle<PTP_CLEANUP_GROUP, cleanup_group_traits> const cleanupgroup( ::CreateThreadpoolCleanupGroup( ) );
+	if ( NULL == cleanupgroup.get() ) {
+		::wprintf_s( L"CreateThreadpoolCleanupGroup failed. LastError: %u\n", ::GetLastError( ) );
+		return;
+		}
+
+	// Associate the callback environment with our thread pool.
+	::SetThreadpoolCallbackPool( &CallBackEnviron, tp_context->pool );
+
+	// Associate the cleanup group with our thread pool.
+	// Objects created with the same callback environment
+	// as the cleanup group become members of the cleanup group.
+	::SetThreadpoolCallbackCleanupGroup( &CallBackEnviron, cleanupgroup.get(), NULL );
+
+
 
 	const ULONG init_bufSize = ((sizeof( FILE_ID_BOTH_DIR_INFORMATION ) + (MAX_PATH * sizeof( wchar_t ))) * 100);
 
@@ -268,11 +345,11 @@ Directory_recursive_info qDirRecursive( const std::wstring &dir, unsigned int le
 	//UNICODE_STRING _glob;
 
 	NTSTATUS query_directory_result = STATUS_PENDING;
-	std::unique_ptr<wchar_t[]> level_str{ std::make_unique<wchar_t[]>( level + 1 )};
-	wmemset(level_str.get(), L'\t', level );
-	level_str[level] = 0;
+	std::unique_ptr<wchar_t[]> level_str{ std::make_unique<wchar_t[]>( tp_context->level + 1 )};
+	wmemset(level_str.get(), L'\t', tp_context->level );
+	level_str[tp_context->level] = 0;
 
-	::wprintf_s( L"%sFiles in directory %s\r\n", level_str.get(), dir.c_str( ) );
+	::wprintf_s( L"%sFiles in directory %s\r\n", level_str.get(), tp_context->dir.c_str( ) );
 	assert( init_bufSize > 1 );
 	const NTSTATUS sBefore = query_directory_result;
 	query_directory_result = ntdll.NtQueryDirectoryFile_f( nt_dir_handle, NULL, NULL, NULL, &iosb, idInfo.get( ), init_bufSize, InfoClass, FALSE, NULL, TRUE );
@@ -308,11 +385,11 @@ Directory_recursive_info qDirRecursive( const std::wstring &dir, unsigned int le
 			goto nextItem;
 			}
 
-		recursive_info.total_size += pFileInf->AllocationSize.QuadPart;
+		tp_context_mutable_ptr->recursive_info.total_size += pFileInf->AllocationSize.QuadPart;
 		//const auto lores = GetCompressedFileSizeW( , ) 
-		displayInfo( pFileInf, dir, level_str.get( ) );
+		displayInfo( pFileInf, tp_context->dir, level_str.get( ) );
 
-		++(recursive_info.numItems);
+		++(tp_context_mutable_ptr->recursive_info.numItems);
 		if ( (pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) || writeToScreen ) {//I'd like to avoid building a null terminated string unless it is necessary
 			std::vector<WCHAR> fNameVect;
 
@@ -324,24 +401,12 @@ Directory_recursive_info qDirRecursive( const std::wstring &dir, unsigned int le
 			fNameVect.emplace_back( L'\0' );
 			PCWSTR const fNameChar = &(fNameVect[ 0 ]);
 
-
 			if ( writeToScreen ) {
-				writeCompressedFileSizeInfoToScreen( pFileInf, dir, fNameChar, level_str.get( ) );
+				writeCompressedFileSizeInfoToScreen( pFileInf, tp_context->dir, fNameChar, level_str.get( ) );
 				}
 			if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
+				breadthDirs.emplace_back(fNameChar);
 
-				if ( dir[ dir.length( ) - 1 ] != L'\\' ) {
-					//breadthDirs.emplace_back( std::wstring( curDir ) + L'\\' + fNameChar + L'\\' );
-					auto query = std::wstring( dir + L'\\' + fNameChar + L'\\' );
-					qDirRecursive( query, level + 1 );
-					//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
-					}
-				else {
-					//breadthDirs.emplace_back( std::wstring( curDir ) + fNameChar + L'\\' );
-					auto query = std::wstring( dir + fNameChar + L'\\' );
-					qDirRecursive( query, level + 1 );
-					//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
-					}
 				//std::wstring dirstr = curDir + L"\\" + fNameChar + L"\\";
 				//breadthDirs.emplace_back( dirstr );
 				//numItems += ListDirectory( dirstr.c_str( ), dirs, idInfo, writeToScreen );
@@ -361,32 +426,89 @@ Directory_recursive_info qDirRecursive( const std::wstring &dir, unsigned int le
 			pFileInf = nullptr;
 			}
 		}
+	std::unique_ptr<Directory_ThreadPool_Context[]> subdir_tp_context( std::make_unique<Directory_ThreadPool_Context[]>(breadthDirs.size()));
+	const size_t subdir_tp_context_byte_size = sizeof(Directory_ThreadPool_Context) * breadthDirs.size();
+	
 
-	return recursive_info;
+	//memset(subdir_tp_context.get(), 0, subdir_tp_context_byte_size);
+
+	for ( rsize_t i = 0u; i < breadthDirs.size(); ++i ) {
+		Directory_ThreadPool_Context* this_subdir_tp_context = &(subdir_tp_context[i]);
+		this_subdir_tp_context->level = tp_context->level + 1;
+		this_subdir_tp_context->pool = tp_context->pool;
+		this_subdir_tp_context->recursive_info = Directory_recursive_info{};
+		if ( tp_context->dir[ tp_context->dir.length( ) - 1 ] != L'\\' ) {
+			//breadthDirs.emplace_back( std::wstring( curDir ) + L'\\' + fNameChar + L'\\' );
+			auto query = std::wstring( tp_context->dir + L'\\' + breadthDirs[i] + L'\\' );
+			this_subdir_tp_context->dir = query;
+			//qDirRecursive( Instance, this_subdir_tp_context, Work );
+			PTP_WORK work = ::CreateThreadpoolWork(qDirRecursive, this_subdir_tp_context, &CallBackEnviron);
+			assert(work != nullptr);
+			if ( work == nullptr ) {
+				std::terminate();
+				}
+			::SubmitThreadpoolWork(work);
+			//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
+			}
+		else {
+			//breadthDirs.emplace_back( std::wstring( curDir ) + fNameChar + L'\\' );
+			auto query = std::wstring( tp_context->dir + breadthDirs[i] + L'\\' );
+			this_subdir_tp_context->dir = query;
+			//qDirRecursive( Instance, this_subdir_tp_context, Work );
+			PTP_WORK work = ::CreateThreadpoolWork(qDirRecursive, this_subdir_tp_context, &CallBackEnviron);
+			assert(work != nullptr);
+			if ( work == nullptr ) {
+				std::terminate();
+				}
+			::SubmitThreadpoolWork(work);
+			//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
+			}	
+		}
+
+	::CloseThreadpoolCleanupGroupMembers( cleanupgroup.get(), FALSE, NULL );
+
+	for ( rsize_t i = 0u; i < breadthDirs.size(); ++i ) {
+		tp_context_mutable_ptr->recursive_info.numItems += subdir_tp_context[i].recursive_info.numItems;
+		tp_context_mutable_ptr->recursive_info.total_size += subdir_tp_context[i].recursive_info.total_size;
+		}
+	return;
 	}
 
-
-
 void stdRecurseFindFutures( const std::wstring raw_dir ) {
+	const std::wstring dir = L"\\\\?\\" + raw_dir;
+
+
+	// Create a custom, dedicated thread pool.
+	unique_handle<PTP_POOL, pool_traits> const pool( ::CreateThreadpool( NULL ) );
+	if ( NULL == pool.get() ) {
+		::wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
+		return;
+		}
+
+
+
+	Directory_ThreadPool_Context tp_context { pool.get(), dir, 2u, Directory_recursive_info{}};
+
 	{
 		void * context = nullptr;
-		work w(CreateThreadpoolWork(hard_work, context, nullptr));
+		work w(::CreateThreadpoolWork(hard_work, context, nullptr));
 		check_bool(w);
 
-		SubmitThreadpoolWork(w.get());
+		::SubmitThreadpoolWork(w.get());
 		bool cancel = false;
 		WaitForThreadpoolWorkCallbacks(w.get(), cancel);
 	}
 
 	{
 		void * context = nullptr;
-		check_bool(TrySubmitThreadpoolCallback(
+		check_bool(::TrySubmitThreadpoolCallback(
 		simple_work, context, nullptr));
 	}
-	const std::wstring dir = L"\\\\?\\" + raw_dir;
 
 
-	Directory_recursive_info recursive_info_top = qDirRecursive( dir, 2u );
+	qDirRecursive( nullptr, &tp_context, nullptr );
+
+
 
 
 	//UNICODE_STRING path = {};
@@ -457,8 +579,8 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	//	}
 
 	if (writeToScreen) {
-		::wprintf_s(L"Total number of files: %I64u\r\n", recursive_info_top.numItems);
-		::wprintf_s(L"Total size of files: %I64u\r\n", recursive_info_top.total_size);
+		::wprintf_s(L"Total number of files: %I64u\r\n", tp_context.recursive_info.numItems);
+		::wprintf_s(L"Total size of files: %I64u\r\n", tp_context.recursive_info.total_size);
 		}
 	return;
 	}
