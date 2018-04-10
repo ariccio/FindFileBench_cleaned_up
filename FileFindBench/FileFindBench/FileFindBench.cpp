@@ -110,6 +110,33 @@ struct cleanup_group_traits {
 	};
 
 
+struct unicode_string_dynamic_memory_manager {
+	unicode_string_dynamic_memory_manager(_In_range_( <, ( USHRT_MAX / sizeof(wchar_t) ) ) rsize_t size) : storage(size) {
+		assert( ( size * sizeof(wchar_t) ) < USHRT_MAX );
+		managed.MaximumLength = static_cast<USHORT>( size * sizeof(wchar_t) );
+		managed.Length = 0;
+		managed.Buffer = nullptr;
+	}
+	unicode_string_dynamic_memory_manager(std::wstring string) : storage(std::size(string) + 10) {
+		if ( storage.size() >= USHRT_MAX ) {
+			storage.resize( USHRT_MAX );
+			}
+
+		storage.assign(std::begin(string), std::end(string));
+		storage.emplace_back(L'\0');
+		assert( ( storage.capacity() * sizeof(wchar_t) ) < USHRT_MAX );
+		managed.MaximumLength = static_cast<USHORT>( storage.capacity() * sizeof(wchar_t) );
+		managed.Length = static_cast<USHORT>( storage.size() * sizeof(wchar_t) );
+		managed.Buffer = storage.data();
+	}
+
+	unicode_string_dynamic_memory_manager(unicode_string_dynamic_memory_manager&) = delete;
+	unicode_string_dynamic_memory_manager& operator=(unicode_string_dynamic_memory_manager&) =delete;
+	std::vector<wchar_t> storage;
+	UNICODE_STRING managed;
+};
+
+
 
 template <PTP_WORK_CALLBACK callback, PVOID const context>
 class functional_pool {
@@ -278,6 +305,9 @@ bool openDirectoryHandle( const std::wstring& dir, _Out_ HANDLE* const new_handl
 	(*new_handle) = ::CreateFileW(dir.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OVERLAPPED, NULL);
 	if ( (*new_handle) == INVALID_HANDLE_VALUE ) {
 		const DWORD err = ::GetLastError( );
+		if ( err == ERROR_ACCESS_DENIED ) {
+			return false;
+			}
 		::fwprintf_s( stderr, L"Failed to open directory %s because of error %lu\r\n", dir.c_str( ), err );
 		::fwprintf_s( stderr, L"err: `%lu` means: %s\r\n", err, handyDandyErrMsgFormatter( ).c_str( ) );
 		return false;
@@ -336,7 +366,6 @@ void NTAPI qDirRecursive( _Inout_ PTP_CALLBACK_INSTANCE /*Instance*/, _Inout_opt
 	std::unique_ptr<__declspec(align(8)) wchar_t[ ]> idInfo { std::make_unique<__declspec(align(8)) wchar_t[ ]>( init_bufSize ) };
 	::wmemset( idInfo.get( ), 0, init_bufSize );
 
-	std::vector<std::wstring> breadthDirs;
 
 	std::vector<std::future<std::pair<std::uint64_t, std::uint64_t>>> futureDirs;
 
@@ -375,6 +404,10 @@ void NTAPI qDirRecursive( _Inout_ PTP_CALLBACK_INSTANCE /*Instance*/, _Inout_opt
 	const ULONG_PTR count_records = bufSizeWritten / sizeof( THIS_FILE_INFORMATION_CLASS );
 	const THIS_FILE_INFORMATION_CLASS* pFileInf = reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>(idInfo.get( ));
 
+	std::vector<std::wstring> breadthDirs;
+	
+	//absolute guess
+	breadthDirs.reserve(10);
 
 	assert( pFileInf != NULL );
 	while ( NT_SUCCESS( query_directory_result ) && (pFileInf != NULL) ) {
@@ -391,25 +424,19 @@ void NTAPI qDirRecursive( _Inout_ PTP_CALLBACK_INSTANCE /*Instance*/, _Inout_opt
 
 		++(tp_context_mutable_ptr->recursive_info.numItems);
 		if ( (pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) || writeToScreen ) {//I'd like to avoid building a null terminated string unless it is necessary
-			std::vector<WCHAR> fNameVect;
-
-
-			fNameVect.reserve( FileDirectoryInformationFileNameRequiredBufferCountWithNull( pFileInf ) );
 
 			PCWCHAR const end = pFileInf->FileName + (pFileInf->FileNameLength / sizeof( WCHAR ));
-			fNameVect.insert( fNameVect.end( ), pFileInf->FileName, end );
-			fNameVect.emplace_back( L'\0' );
-			PCWSTR const fNameChar = &(fNameVect[ 0 ]);
 
 			if ( writeToScreen ) {
+				std::vector<WCHAR> fNameVect;
+				fNameVect.insert( fNameVect.end( ), pFileInf->FileName, end );
+				fNameVect.emplace_back( L'\0' );
+				PCWSTR const fNameChar = &(fNameVect[ 0 ]);
+				fNameVect.reserve( FileDirectoryInformationFileNameRequiredBufferCountWithNull( pFileInf ) );
 				writeCompressedFileSizeInfoToScreen( pFileInf, tp_context->dir, fNameChar, level_str.get( ) );
 				}
 			if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
-				breadthDirs.emplace_back(fNameChar);
-
-				//std::wstring dirstr = curDir + L"\\" + fNameChar + L"\\";
-				//breadthDirs.emplace_back( dirstr );
-				//numItems += ListDirectory( dirstr.c_str( ), dirs, idInfo, writeToScreen );
+				breadthDirs.emplace_back( std::wstring(pFileInf->FileName, (pFileInf->FileNameLength / sizeof( WCHAR ))) );
 				}
 			}
 
@@ -433,7 +460,7 @@ void NTAPI qDirRecursive( _Inout_ PTP_CALLBACK_INSTANCE /*Instance*/, _Inout_opt
 	//memset(subdir_tp_context.get(), 0, subdir_tp_context_byte_size);
 
 	for ( rsize_t i = 0u; i < breadthDirs.size(); ++i ) {
-		Directory_ThreadPool_Context* this_subdir_tp_context = &(subdir_tp_context[i]);
+		Directory_ThreadPool_Context* const this_subdir_tp_context = &(subdir_tp_context[i]);
 		this_subdir_tp_context->level = tp_context->level + 1;
 		this_subdir_tp_context->pool = tp_context->pool;
 		this_subdir_tp_context->recursive_info = Directory_recursive_info{};
@@ -477,49 +504,21 @@ void NTAPI qDirRecursive( _Inout_ PTP_CALLBACK_INSTANCE /*Instance*/, _Inout_opt
 void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	const std::wstring dir = L"\\\\?\\" + raw_dir;
 
-
-	// Create a custom, dedicated thread pool.
-	unique_handle<PTP_POOL, pool_traits> const pool( ::CreateThreadpool( NULL ) );
-	if ( NULL == pool.get() ) {
-		::wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
-		return;
+	//UNICODE_STRING path = {};
+	unicode_string_dynamic_memory_manager path(raw_dir);
+	RTL_RELATIVE_NAME rtl_rel_name = {};
+	PCWSTR ntpart = nullptr;
+	////::RtlInitUnicodeString(&path, dir.c_str());
+	const NTSTATUS conversion_result = ntdll.RtlDosPathNameToNtPathName_U_WithStatus_f(raw_dir.c_str(), &(path.managed), &ntpart, &rtl_rel_name);
+	if ( !NT_SUCCESS( conversion_result ) ) {
+		fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus failed!\r\n" );
+		std::terminate();
+		}
+	else {
+		fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus succeeded! ntpart: %s\r\n", ntpart );
 		}
 
 
-
-	Directory_ThreadPool_Context tp_context { pool.get(), dir, 2u, Directory_recursive_info{}};
-
-	{
-		void * context = nullptr;
-		work w(::CreateThreadpoolWork(hard_work, context, nullptr));
-		check_bool(w);
-
-		::SubmitThreadpoolWork(w.get());
-		bool cancel = false;
-		WaitForThreadpoolWorkCallbacks(w.get(), cancel);
-	}
-
-	{
-		void * context = nullptr;
-		check_bool(::TrySubmitThreadpoolCallback(
-		simple_work, context, nullptr));
-	}
-
-
-	qDirRecursive( nullptr, &tp_context, nullptr );
-
-
-
-
-	//UNICODE_STRING path = {};
-	//RTL_RELATIVE_NAME rtl_rel_name = {};
-	//PCWSTR ntpart = nullptr;
-	////::RtlInitUnicodeString(&path, dir.c_str());
-	//const NTSTATUS conversion_result = ntdll.RtlDosPathNameToNtPathName_U_WithStatus_f(raw_dir.c_str(), &path, &ntpart, &rtl_rel_name);
-	//if ( !NT_SUCCESS( conversion_result ) ) {
-	//	fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus failed!\r\n" );
-	//	std::terminate();
-	//	}
 	//
 	//const ULONG is_dos_device = ntdll.RtlIsDosDeviceName_U_f( raw_dir.c_str( ) );
 	//if ( is_dos_device ) {
@@ -541,6 +540,49 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 		//std::terminate();
 		//}
 	//NtQueryDirectory
+	const NTSTATUS release_result = ntdll.RtlReleaseRelativeName_f(&rtl_rel_name);
+	if(!NT_SUCCESS(release_result)) {
+		fwprintf_s( stderr, L"RtlReleaseRelativeName_f failed!\r\n" );
+		std::terminate();
+		}
+
+	// Create a custom, dedicated thread pool.
+	unique_handle<PTP_POOL, pool_traits> const pool( ::CreateThreadpool( NULL ) );
+	if ( NULL == pool.get() ) {
+		::wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
+		return;
+		}
+
+
+	::SetThreadpoolThreadMaximum(pool.get(), 16u);
+	Directory_ThreadPool_Context tp_context { pool.get(), dir, 2u, Directory_recursive_info{}};
+
+	//{
+	//	void * context = nullptr;
+	//	work w(::CreateThreadpoolWork(hard_work, context, nullptr));
+	//	check_bool(w);
+
+	//	::SubmitThreadpoolWork(w.get());
+	//	bool cancel = false;
+	//	WaitForThreadpoolWorkCallbacks(w.get(), cancel);
+	//}
+
+	//{
+	//	void * context = nullptr;
+	//	check_bool(::TrySubmitThreadpoolCallback(
+	//	simple_work, context, nullptr));
+	//}
+
+	TP_CALLBACK_ENVIRON CallBackEnviron;
+	::InitializeThreadpoolEnvironment( &CallBackEnviron );
+	PTP_WORK work = ::CreateThreadpoolWork(qDirRecursive, &tp_context, &CallBackEnviron);
+	::SubmitThreadpoolWork(work);
+	::WaitForThreadpoolWorkCallbacks(work, FALSE);
+	//qDirRecursive( nullptr, &tp_context, nullptr );
+
+
+
+
 
 
 	/*
