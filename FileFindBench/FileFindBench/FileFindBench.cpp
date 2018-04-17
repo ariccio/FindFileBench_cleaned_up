@@ -4,9 +4,6 @@
 
 constexpr const bool writeToScreen = false;
 
-void test( _Post_ptr_invalid_ HANDLE){}
-
-
 //Kenny Kerr
 template <typename Type, typename Traits>
 class unique_handle {
@@ -78,34 +75,35 @@ struct file_traits {
 		}
 	};
 
-struct work_traits {
-	static PTP_WORK invalid( ) noexcept {
-		return nullptr;
-		}
+//struct work_traits {
+//	static PTP_WORK invalid( ) noexcept {
+//		return nullptr;
+//		}
+//
+//	static void close( PTP_WORK const value ) noexcept {
+//		::CloseThreadpoolWork( value );
+//		}
+//	};
 
-	static void close( PTP_WORK const value ) noexcept {
-		::CloseThreadpoolWork( value );
-		}
-	};
+//typedef unique_handle<PTP_WORK, work_traits> work;
 
-typedef unique_handle<PTP_WORK, work_traits> work;
 struct check_failed {
 	explicit check_failed( long result ) :
 		error( result ) { }
 	long error;
 	};
 
-inline void check_bool( const work& result ) {
-	if ( !(result.get()) ) {
-		throw check_failed( ::GetLastError( ) );
-		}
-	}
-
-inline void check_bool( const BOOL& result ) {
-	if ( !(result) ) {
-		throw check_failed( ::GetLastError( ) );
-		}
-	}
+//inline void check_bool( const work& result ) {
+//	if ( !(result.get()) ) {
+//		throw check_failed( ::GetLastError( ) );
+//		}
+//	}
+//
+//inline void check_bool( const BOOL& result ) {
+//	if ( !(result) ) {
+//		throw check_failed( ::GetLastError( ) );
+//		}
+//	}
 
 template <typename T>
 void check( T expected, T actual ) {
@@ -115,25 +113,25 @@ void check( T expected, T actual ) {
 	}
 
 
-struct pool_traits {
-	static PTP_POOL invalid( ) noexcept {
-		return nullptr;
-		}
+//struct pool_traits {
+//	static PTP_POOL invalid( ) noexcept {
+//		return nullptr;
+//		}
+//
+//	static void close( PTP_POOL pool ) noexcept {
+//		::CloseThreadpool( pool );
+//		}
+//	};
 
-	static void close( PTP_POOL pool ) noexcept {
-		::CloseThreadpool( pool );
-		}
-	};
-
-struct cleanup_group_traits {
-	static PTP_CLEANUP_GROUP invalid( ) noexcept {
-		return nullptr;
-		}
-
-	static void close( PTP_CLEANUP_GROUP cleanupgroup ) noexcept {
-		::CloseThreadpoolCleanupGroup( cleanupgroup );
-		}
-	};
+//struct cleanup_group_traits {
+//	static PTP_CLEANUP_GROUP invalid( ) noexcept {
+//		return nullptr;
+//		}
+//
+//	static void close( PTP_CLEANUP_GROUP cleanupgroup ) noexcept {
+//		::CloseThreadpoolCleanupGroup( cleanupgroup );
+//		}
+//	};
 
 
 struct unicode_string_dynamic_memory_manager {
@@ -164,48 +162,48 @@ struct unicode_string_dynamic_memory_manager {
 
 
 
-template <PTP_WORK_CALLBACK callback, PVOID const context>
-class functional_pool {
-	TP_CALLBACK_ENVIRON CallBackEnviron;
-	work m_work;
-	PTP_CLEANUP_GROUP cleanupgroup;
-	PTP_POOL pool;
+//template <PTP_WORK_CALLBACK callback, PVOID const context>
+//class functional_pool {
+//	TP_CALLBACK_ENVIRON CallBackEnviron;
+//	work m_work;
+//	PTP_CLEANUP_GROUP cleanupgroup;
+//	PTP_POOL pool;
+//
+//public:
+//	functional_pool( ) {
+//		::InitializeThreadpoolEnvironment( &CallBackEnviron );
+//		pool = ::CreateThreadpool( NULL )
+//		if ( NULL == pool ) {
+//			wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
+//			std::terminate();
+//			}
+//		cleanupgroup = ::CreateThreadpoolCleanupGroup( );
+//		if ( NULL == cleanupgroup ) {
+//			wprintf_s( L"CreateThreadpoolCleanupGroup failed. LastError: %u\n", ::GetLastError( ) );
+//			std::terminate();
+//			}
+//
+//		// Associate the callback environment with our thread pool.
+//		::SetThreadpoolCallbackPool( &CallBackEnviron, pool );
+//		::SetThreadpoolCallbackCleanupGroup( &CallBackEnviron, cleanupgroup, NULL );
+//
+//		m_work = ::CreateThreadpoolWork( callback, context, nullptr )
+//		check_bool( m_work );
+//		}
+//	//template <typename Function>
+//	//void submit( Function const & function ) {
+//	//	::SubmitThreadpoolWork( m_work.get( ) );
+//	//	}
+//	~functional_pool( ) {
+//		::WaitForThreadpoolWorkCallbacks( m_work.get( ), true );
+//		::CloseThreadpoolCleanupGroupMembers( cleanupgroup, FALSE, NULL );
+//		::CloseThreadpoolCleanupGroup( cleanupgroup );
+//		::CloseThreadpool( pool );
+//		}
+//	};
 
-public:
-	functional_pool( ) {
-		::InitializeThreadpoolEnvironment( &CallBackEnviron );
-		pool = ::CreateThreadpool( NULL )
-		if ( NULL == pool ) {
-			wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
-			std::terminate();
-			}
-		cleanupgroup = ::CreateThreadpoolCleanupGroup( );
-		if ( NULL == cleanupgroup ) {
-			wprintf_s( L"CreateThreadpoolCleanupGroup failed. LastError: %u\n", ::GetLastError( ) );
-			std::terminate();
-			}
-
-		// Associate the callback environment with our thread pool.
-		::SetThreadpoolCallbackPool( &CallBackEnviron, pool );
-		::SetThreadpoolCallbackCleanupGroup( &CallBackEnviron, cleanupgroup, NULL );
-
-		m_work = ::CreateThreadpoolWork( callback, context, nullptr )
-		check_bool( m_work );
-		}
-	//template <typename Function>
-	//void submit( Function const & function ) {
-	//	::SubmitThreadpoolWork( m_work.get( ) );
-	//	}
-	~functional_pool( ) {
-		::WaitForThreadpoolWorkCallbacks( m_work.get( ), true );
-		::CloseThreadpoolCleanupGroupMembers( cleanupgroup, FALSE, NULL );
-		::CloseThreadpoolCleanupGroup( cleanupgroup );
-		::CloseThreadpool( pool );
-		}
-	};
-
-void CALLBACK hard_work(PTP_CALLBACK_INSTANCE, void* /*context*/, PTP_WORK) {}
-void CALLBACK simple_work(PTP_CALLBACK_INSTANCE, void * /*context*/) {}
+//void CALLBACK hard_work(PTP_CALLBACK_INSTANCE, void* /*context*/, PTP_WORK) {}
+//void CALLBACK simple_work(PTP_CALLBACK_INSTANCE, void * /*context*/) {}
 
 NtdllWrap::NtdllWrap( ) {
 	hntdll = ::GetModuleHandleW( L"C:\\Windows\\System32\\ntdll.dll" );
@@ -413,11 +411,17 @@ Directory_recursive_info await_resume( std::future<Directory_recursive_info>& di
 	return dir_future.get();
 	}
 
-
+std::unique_ptr<wchar_t[]> build_level_str( unsigned int level ) {
+	std::unique_ptr<wchar_t[]> level_str{ std::make_unique<wchar_t[]>( level + 1 )};
+	::wmemset(level_str.get(), L'\t', level );
+	level_str[level] = 0;
+	return level_str;
+	}
 
 std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Context Context ) {
 	
 	//Directory_recursive_info recursive_info{ };
+	Directory_recursive_info this_recursive_info{};
 	
 
 	HANDLE nt_dir_handle_raw;
@@ -442,11 +446,12 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 	//UNICODE_STRING _glob;
 
 	NTSTATUS query_directory_result = STATUS_PENDING;
-	std::unique_ptr<wchar_t[]> level_str{ std::make_unique<wchar_t[]>( Context.level + 1 )};
-	::wmemset(level_str.get(), L'\t', Context.level );
-	level_str[Context.level] = 0;
 
-	::wprintf_s( L"%sFiles in directory %s\r\n", level_str.get(), Context.this_query_dir.c_str( ) );
+	if constexpr( writeToScreen ) {
+		std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
+		::wprintf_s( L"%sFiles in directory %s\r\n", level_str.get(), Context.this_query_dir.c_str( ) );
+		}
+
 	assert( init_bufSize > 1 );
 	const NTSTATUS sBefore = query_directory_result;
 	query_directory_result = ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), NULL, NULL, NULL, &iosb, idInfo.get( ), init_bufSize, InfoClass, FALSE, NULL, TRUE );
@@ -486,11 +491,13 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 			goto nextItem;
 			}
 
-		Context.recursive_info.total_size += pFileInf->AllocationSize.QuadPart;
+		this_recursive_info.total_size += pFileInf->AllocationSize.QuadPart;
 		//const auto lores = GetCompressedFileSizeW( , ) 
-		displayInfo( pFileInf, Context.this_query_dir, level_str.get( ) );
-
-		++(Context.recursive_info.numItems);
+		{
+			std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
+			displayInfo( pFileInf, Context.this_query_dir, level_str.get( ) );
+		}
+		++(this_recursive_info.numItems);
 		if ( (pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) || writeToScreen ) {//I'd like to avoid building a null terminated string unless it is necessary
 
 			PCWCHAR const end = pFileInf->FileName + (pFileInf->FileNameLength / sizeof( WCHAR ));
@@ -501,6 +508,7 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 				fNameVect.emplace_back( L'\0' );
 				PCWSTR const fNameChar = &(fNameVect[ 0 ]);
 				fNameVect.reserve( FileDirectoryInformationFileNameRequiredBufferCountWithNull( pFileInf ) );
+				std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
 				writeCompressedFileSizeInfoToScreen( pFileInf, Context.this_query_dir, fNameChar, level_str.get( ) );
 				}
 			if ( pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
@@ -554,7 +562,6 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 
 	//::CloseThreadpoolCleanupGroupMembers( tp_context.cleanupgroup.get(), FALSE, NULL );
 
-	Directory_recursive_info this_recursive_info{};
 	for ( rsize_t i = 0u; i < breadthDirs.size(); ++i ) {
 		const Directory_recursive_info recursive_info = co_await futureDirs[i];
 		this_recursive_info.numItems += recursive_info.numItems;
@@ -700,10 +707,10 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	//	fwprintf_s( stderr, L"Closing handle nt_dir_handle (%p) failed!\r\n\tResult code: %li\r\n", nt_dir_handle, close_result );
 	//	}
 
-	if (writeToScreen) {
+	//if (writeToScreen) {
 		::wprintf_s(L"Total number of files: %I64u\r\n", all_dirs.numItems);
 		::wprintf_s(L"Total size of files: %I64u\r\n", all_dirs.total_size);
-		}
+		//}
 	return;
 	}
 
