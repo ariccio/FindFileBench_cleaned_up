@@ -312,9 +312,10 @@ void displayInfo( const THIS_FILE_INFORMATION_CLASS* const pFileInf, const std::
 		}
 	}
 
-constexpr rsize_t FileDirectoryInformationFileNameRequiredBufferCountWithNull( const FILE_DIRECTORY_INFORMATION* const pFileInf ) {
-	return ( pFileInf->FileNameLength / sizeof( WCHAR ) ) + 1;
-	}
+//constexpr rsize_t FileDirectoryInformationFileNameRequiredBufferCountWithNull( const FILE_DIRECTORY_INFORMATION* const pFileInf ) {
+//	//whoopsie, need to +1 before dividing?
+//	return ( pFileInf->FileNameLength / sizeof( WCHAR ) ) + 1;
+//	}
 
 constexpr PCWCHAR FileDirectoryInformationFileNameEndPointer( const FILE_DIRECTORY_INFORMATION* const pFileInf ) {
 	return pFileInf->FileName + ( pFileInf->FileNameLength / sizeof( WCHAR ) );
@@ -444,7 +445,7 @@ std::unique_ptr<wchar_t[]> build_level_str( unsigned int level ) {
 	}
 
 std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Context Context ) {
-	//co_await resume_background();
+	co_await resume_background();
 
 
 	//Directory_recursive_info recursive_info{ };
@@ -496,6 +497,7 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 		idInfo = std::make_unique<__declspec(align(8)) wchar_t[ ]>( bufSize );
 		query_directory_result = /*co_await?*/ ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), NULL, NULL, NULL, &iosb, idInfo.get( ), bufSize, InfoClass, FALSE, NULL, TRUE );
 		}
+	
 	assert( NT_SUCCESS( query_directory_result ) );
 	//bool id_info_heap = false;
 	const ULONG_PTR bufSizeWritten = iosb.Information;
@@ -534,7 +536,6 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 				fNameVect.insert( fNameVect.end( ), pFileInf->FileName, end );
 				fNameVect.emplace_back( L'\0' );
 				PCWSTR const fNameChar = &(fNameVect[ 0 ]);
-				fNameVect.reserve( FileDirectoryInformationFileNameRequiredBufferCountWithNull( pFileInf ) );
 				std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
 				writeCompressedFileSizeInfoToScreen( pFileInf, Context.this_query_dir, fNameChar, level_str.get( ) );
 				}

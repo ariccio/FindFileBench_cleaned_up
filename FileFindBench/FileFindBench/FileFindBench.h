@@ -154,6 +154,7 @@ struct NtdllWrap {
 //      FILE_OBJECTID_INFORMATION
 //
 
+#pragma pack(push, 1)
 typedef struct _FILE_DIRECTORY_INFORMATION {
     ULONG NextEntryOffset;
     ULONG FileIndex;
@@ -345,6 +346,8 @@ typedef struct _REPARSE_DATA_BUFFER {
         } GenericReparseBuffer;
     } DUMMYUNIONNAME;
 } REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+
+#pragma pack(pop)
 
 #if _MSC_VER >= 1200
 #pragma warning(pop)
