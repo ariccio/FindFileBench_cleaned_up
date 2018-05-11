@@ -405,21 +405,21 @@ struct Directory_ThreadPool_Context {
 
 };
 
-//struct resume_background {
-//	bool await_ready() noexcept { return false; }
-//	void await_resume() noexcept { };
-//	void await_suspend(std::experimental::coroutine_handle<> handle) noexcept {
-//		const auto tp_lambda = [](PTP_CALLBACK_INSTANCE, void* context) noexcept {
-//			//operator() calls .resume()
-//			std::experimental::coroutine_handle<>::from_address(context)();
-//			};
-//		const BOOL submit_result = ::TrySubmitThreadpoolCallback(tp_lambda, handle.address(), nullptr);
-//		if (!submit_result) {
-//			wprintf_s( L"TrySubmitThreadpoolCallback failed! Error: %s\r\n", handyDandyErrMsgFormatter().c_str() );
-//			std::terminate();
-//			}		
-//		}
-//	};
+struct resume_background {
+	bool await_ready() noexcept { return false; }
+	void await_resume() noexcept { };
+	void await_suspend(std::experimental::coroutine_handle<> handle) noexcept {
+		const auto tp_lambda = [](PTP_CALLBACK_INSTANCE, void* context) noexcept {
+			//operator() calls .resume()
+			std::experimental::coroutine_handle<>::from_address(context)();
+			};
+		const BOOL submit_result = ::TrySubmitThreadpoolCallback(tp_lambda, handle.address(), g_CallBackEnviron);
+		if (!submit_result) {
+			wprintf_s( L"TrySubmitThreadpoolCallback failed! Error: %s\r\n", handyDandyErrMsgFormatter().c_str() );
+			std::terminate();
+			}		
+		}
+	};
 
 bool await_ready(const std::future<Directory_recursive_info>& dir_future ) noexcept {
 	return dir_future.valid();
@@ -462,8 +462,7 @@ std::unique_ptr<wchar_t[]> build_level_str( unsigned int level ) {
 	}
 
 std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Context Context ) {
-	//co_await resume_background();
-
+	//co_await std::experimental::suspend_always();
 
 	//Directory_recursive_info recursive_info{ };
 	Directory_recursive_info this_recursive_info{};
@@ -604,6 +603,8 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 
 			//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
 			}	
+		co_await resume_background();
+
 		}
 
 	//::CloseThreadpoolCleanupGroupMembers( tp_context.cleanupgroup.get(), FALSE, NULL );
@@ -651,6 +652,7 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 				incomplete.erase(item);
 				}
 			else{
+				YieldProcessor();
 				}
 			}
 	}
@@ -751,7 +753,7 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 
 
 	::InitializeThreadpoolEnvironment( &(tp_context.CallBackEnviron) );
-	//::SetThreadpoolThreadMaximum(pool_owner.get(), 2u);
+	::SetThreadpoolThreadMaximum(pool_owner.get(), 4u);
 	g_CallBackEnviron = &(tp_context.CallBackEnviron);
 	//PTP_WORK work = ::CreateThreadpoolWork(qDirRecursive, &tp_context, &(tp_context.CallBackEnviron));
 	//::SubmitThreadpoolWork(work);
