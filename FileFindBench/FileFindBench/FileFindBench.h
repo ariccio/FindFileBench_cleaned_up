@@ -134,7 +134,7 @@ struct NtdllWrap {
 	NtCreateFile_t NtCreateFile_f;
 	NtClose_t NtClose_f;
 
-	NtdllWrap( );
+	NtdllWrap( ) noexcept;
 	NtdllWrap( NtdllWrap& in ) = delete;
 	};
 
