@@ -668,6 +668,7 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 		::wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
 		return;
 		}
+	::SetThreadpoolThreadMaximum(pool_owner.get(), 4u);
 
 
 
@@ -678,7 +679,9 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 
 
 	::InitializeThreadpoolEnvironment( &(tp_context.CallBackEnviron) );
+	//::SetThreadpoolThreadMaximum(NULL, 4u);
 	::SetThreadpoolThreadMaximum(pool_owner.get(), 4u);
+	::SetThreadpoolThreadMinimum(pool_owner.get(), 1u);
 	g_CallBackEnviron = &(tp_context.CallBackEnviron);
 	//PTP_WORK work = ::CreateThreadpoolWork(qDirRecursive, &tp_context, &(tp_context.CallBackEnviron));
 	//::SubmitThreadpoolWork(work);
