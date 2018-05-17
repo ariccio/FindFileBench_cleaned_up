@@ -3,9 +3,10 @@
 #include <experimental/coroutine>
 
 constexpr const bool writeToScreen = false;
+
+//trying to figure out why it's launching more threads than I want
 static PTP_CALLBACK_ENVIRON g_CallBackEnviron = nullptr;
 
-//#define assert(x) (void)((!!(x)) || (__debugbreak(), 0))
 
 //Kenny Kerr
 template <typename Type, typename Traits>
@@ -166,45 +167,6 @@ struct unicode_string_dynamic_memory_manager {
 
 
 
-//template <PTP_WORK_CALLBACK callback, PVOID const context>
-//class functional_pool {
-//	TP_CALLBACK_ENVIRON CallBackEnviron;
-//	work m_work;
-//	PTP_CLEANUP_GROUP cleanupgroup;
-//	PTP_POOL pool;
-//
-//public:
-//	functional_pool( ) {
-//		::InitializeThreadpoolEnvironment( &CallBackEnviron );
-//		pool = ::CreateThreadpool( NULL )
-//		if ( NULL == pool ) {
-//			wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
-//			std::terminate();
-//			}
-//		cleanupgroup = ::CreateThreadpoolCleanupGroup( );
-//		if ( NULL == cleanupgroup ) {
-//			wprintf_s( L"CreateThreadpoolCleanupGroup failed. LastError: %u\n", ::GetLastError( ) );
-//			std::terminate();
-//			}
-//
-//		// Associate the callback environment with our thread pool.
-//		::SetThreadpoolCallbackPool( &CallBackEnviron, pool );
-//		::SetThreadpoolCallbackCleanupGroup( &CallBackEnviron, cleanupgroup, NULL );
-//
-//		m_work = ::CreateThreadpoolWork( callback, context, nullptr )
-//		check_bool( m_work );
-//		}
-//	//template <typename Function>
-//	//void submit( Function const & function ) {
-//	//	::SubmitThreadpoolWork( m_work.get( ) );
-//	//	}
-//	~functional_pool( ) {
-//		::WaitForThreadpoolWorkCallbacks( m_work.get( ), true );
-//		::CloseThreadpoolCleanupGroupMembers( cleanupgroup, FALSE, NULL );
-//		::CloseThreadpoolCleanupGroup( cleanupgroup );
-//		::CloseThreadpool( pool );
-//		}
-//	};
 
 void CALLBACK hard_work(PTP_CALLBACK_INSTANCE, void* /*context*/, PTP_WORK) noexcept {}
 void CALLBACK simple_work(PTP_CALLBACK_INSTANCE, void * /*context*/) noexcept {}
@@ -438,7 +400,6 @@ void await_suspend(std::future<std::vector<Directory_recursive_info>>& /*dir_fut
 	const BOOL submit_result = ::TrySubmitThreadpoolCallback(tp_lambda, handle.address(), g_CallBackEnviron);
 	if (!submit_result) {
 		wprintf_s( L"TrySubmitThreadpoolCallback failed! Error: %s\r\n", handyDandyErrMsgFormatter().c_str() );
-		__debugbreak();
 		}
 	
 	}
@@ -449,7 +410,6 @@ std::vector<Directory_recursive_info> await_resume( std::future<std::vector<Dire
 	}
 	catch (const std::future_error& e ) {
 		wprintf_s( L"future error, code: %i, what:%S\r\n", e.code().value(), e.what());
-		__debugbreak();
 		return {};
 	}
 	}
@@ -461,72 +421,14 @@ std::unique_ptr<wchar_t[]> build_level_str( unsigned int level ) {
 	return level_str;
 	}
 
-std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Context Context ) {
-	//co_await std::experimental::suspend_always();
 
-	//Directory_recursive_info recursive_info{ };
-	Directory_recursive_info this_recursive_info{};
-	
-
-	HANDLE nt_dir_handle_raw;
-	if ( !openDirectoryHandle( Context.this_query_dir, &nt_dir_handle_raw ) ) {
-		co_return Directory_recursive_info();
-		}
-
-	unique_handle<HANDLE, file_traits> nt_dir_handle( nt_dir_handle_raw );
-
-
-
-	const ULONG init_bufSize = ((sizeof( FILE_ID_BOTH_DIR_INFORMATION ) + (MAX_PATH * sizeof( wchar_t ))) * 100);
-
-	std::unique_ptr<__declspec(align(8)) wchar_t[ ]> idInfo { std::make_unique<__declspec(align(8)) wchar_t[ ]>( init_bufSize ) };
-	::wmemset( idInfo.get( ), 0, init_bufSize );
-
-
-	std::vector<std::future<Directory_recursive_info>> futureDirs;
-	std::future<std::vector<Directory_recursive_info>> return_futures;
-	IO_STATUS_BLOCK iosb{ };
-
-	//UNICODE_STRING _glob;
-
-	NTSTATUS query_directory_result = STATUS_PENDING;
-
-	if constexpr( writeToScreen ) {
-		std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
-		::wprintf_s( L"%sFiles in directory %s\r\n", level_str.get(), Context.this_query_dir.c_str( ) );
-		}
-
-	assert( init_bufSize > 1 );
-	const NTSTATUS sBefore = query_directory_result;
-	query_directory_result = ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), NULL, NULL, NULL, &iosb, idInfo.get( ), init_bufSize, InfoClass, FALSE, NULL, TRUE );
-	if ( (query_directory_result == STATUS_TIMEOUT) || (query_directory_result == STATUS_PENDING) ) {
-		__debugbreak();
-		//std::terminate( );
-		}
-	assert( NT_SUCCESS( query_directory_result ) );
-	assert( query_directory_result != sBefore );
-	assert( ::GetLastError( ) != ERROR_MORE_DATA );
-
-	ULONG bufSize = init_bufSize;
-	while ( query_directory_result == STATUS_BUFFER_OVERFLOW ) {
-		idInfo.reset( );
-		bufSize *= 2;
-		idInfo = std::make_unique<__declspec(align(8)) wchar_t[ ]>( bufSize );
-		query_directory_result = /*co_await?*/ ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), NULL, NULL, NULL, &iosb, idInfo.get( ), bufSize, InfoClass, FALSE, NULL, TRUE );
-		}
-	assert( NT_SUCCESS( query_directory_result ) );
-	//bool id_info_heap = false;
-	const ULONG_PTR bufSizeWritten = iosb.Information;
-
-
-	const ULONG_PTR count_records = bufSizeWritten / sizeof( THIS_FILE_INFORMATION_CLASS );
-	const THIS_FILE_INFORMATION_CLASS* pFileInf = reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>(idInfo.get( ));
-
+std::vector<std::wstring> walk_directory_buffer(const THIS_FILE_INFORMATION_CLASS* pFileInf, NTSTATUS& query_directory_result, Directory_recursive_info& this_recursive_info, const Directory_ThreadPool_Context& Context ) {
 	std::vector<std::wstring> breadthDirs;
 	
 	//absolute guess
 	breadthDirs.reserve(10);
 
+	
 	assert( pFileInf != NULL );
 	while ( NT_SUCCESS( query_directory_result ) && (pFileInf != NULL) ) {
 
@@ -574,11 +476,91 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 			pFileInf = nullptr;
 			}
 		}
-	//std::vector<Directory_ThreadPool_Context> subdir_tp_context(breadthDirs.size());
-	//const size_t subdir_tp_context_byte_size = sizeof(Directory_ThreadPool_Context) * breadthDirs.size();
-	
+	return breadthDirs;
+	}
 
-	//memset(subdir_tp_context.get(), 0, subdir_tp_context_byte_size);
+std::vector<std::wstring> callNtQueryDirectoryFile(Directory_ThreadPool_Context& Context, Directory_recursive_info& this_recursive_info, unique_handle<HANDLE, file_traits>& nt_dir_handle) {
+
+	const ULONG init_bufSize = ((sizeof( FILE_ID_BOTH_DIR_INFORMATION ) + (MAX_PATH * sizeof( wchar_t ))) * 100);
+
+	std::unique_ptr<__declspec(align(8)) wchar_t[ ]> idInfo { std::make_unique<__declspec(align(8)) wchar_t[ ]>( init_bufSize ) };
+	::wmemset( idInfo.get( ), 0, init_bufSize );
+
+	IO_STATUS_BLOCK iosb{ };
+
+	NTSTATUS query_directory_result = STATUS_PENDING;
+
+	if constexpr( writeToScreen ) {
+		std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
+		::wprintf_s( L"%sFiles in directory %s\r\n", level_str.get(), Context.this_query_dir.c_str( ) );
+		}
+
+	assert( init_bufSize > 1 );
+	const NTSTATUS sBefore = query_directory_result;
+	query_directory_result = ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), NULL, NULL, NULL, &iosb, idInfo.get( ), init_bufSize, InfoClass, FALSE, NULL, TRUE );
+	if ( (query_directory_result == STATUS_TIMEOUT) || (query_directory_result == STATUS_PENDING) ) {
+		__debugbreak();
+		//std::terminate( );
+		}
+	assert( NT_SUCCESS( query_directory_result ) );
+	assert( query_directory_result != sBefore );
+	assert( ::GetLastError( ) != ERROR_MORE_DATA );
+
+	ULONG bufSize = init_bufSize;
+	while ( query_directory_result == STATUS_BUFFER_OVERFLOW ) {
+		idInfo.reset( );
+		bufSize *= 2;
+		idInfo = std::make_unique<__declspec(align(8)) wchar_t[ ]>( bufSize );
+		query_directory_result = /*co_await?*/ ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), NULL, NULL, NULL, &iosb, idInfo.get( ), bufSize, InfoClass, FALSE, NULL, TRUE );
+		}
+	assert( NT_SUCCESS( query_directory_result ) );
+	//bool id_info_heap = false;
+	const ULONG_PTR bufSizeWritten = iosb.Information;
+
+
+	const ULONG_PTR count_records = bufSizeWritten / sizeof( THIS_FILE_INFORMATION_CLASS );
+	const THIS_FILE_INFORMATION_CLASS* pFileInf = reinterpret_cast<PTHIS_FILE_INFORMATION_CLASS>(idInfo.get( ));
+
+	std::vector<std::wstring> breadthDirs = walk_directory_buffer(pFileInf, query_directory_result, this_recursive_info, Context);
+	return breadthDirs;
+}
+
+std::vector<std::future<Directory_recursive_info>> preprocess_incompletes(rsize_t& completed, std::vector<std::future<Directory_recursive_info>>& futureDirs, Directory_recursive_info& this_recursive_info) {
+	std::vector<std::future<Directory_recursive_info>> incomplete;
+	for ( rsize_t i = 0u; i < futureDirs.size(); ++i ) {
+		if (futureDirs[i].valid()) {
+			try {
+				const auto&& this_item = futureDirs[i].get();
+				this_recursive_info.numItems += this_item.numItems;
+				this_recursive_info.total_size += this_item.total_size;
+			}
+			catch (const std::future_error& e ) {
+				wprintf_s( L"future error, code: %i, what:%S\r\n", e.code().value(), e.what());
+			}
+			++completed;
+			}
+		else{
+			incomplete.emplace_back(std::move(futureDirs[i]));
+			}
+		}
+	return incomplete;
+	}
+
+std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Context Context ) {
+	//co_await std::experimental::suspend_always();
+	Directory_recursive_info this_recursive_info{};
+	
+	HANDLE nt_dir_handle_raw;
+	if ( !openDirectoryHandle( Context.this_query_dir, &nt_dir_handle_raw ) ) {
+		co_return Directory_recursive_info();
+		}
+
+	unique_handle<HANDLE, file_traits> nt_dir_handle( nt_dir_handle_raw );
+
+	std::vector<std::future<Directory_recursive_info>> futureDirs;
+	std::future<std::vector<Directory_recursive_info>> return_futures;
+
+	std::vector<std::wstring> breadthDirs = callNtQueryDirectoryFile( Context, this_recursive_info, nt_dir_handle );
 
 	for ( rsize_t i = 0u; i < breadthDirs.size(); ++i ) {
 		Directory_ThreadPool_Context this_subdir_tp_context{};
@@ -608,46 +590,17 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 		}
 
 	//::CloseThreadpoolCleanupGroupMembers( tp_context.cleanupgroup.get(), FALSE, NULL );
-
-	//for ( rsize_t i = 0u; i < breadthDirs.size(); ++i ) {
-	//	const Directory_recursive_info recursive_info = std::move(futureDirs[i]);
-	//	this_recursive_info.numItems += recursive_info.numItems;
-	//	this_recursive_info.total_size += recursive_info.total_size;
-	//	}
 	
 	rsize_t completed = 0;
-	std::vector<std::future<Directory_recursive_info>> incomplete;
-	for ( rsize_t i = 0u; i < futureDirs.size(); ++i ) {
-		if (futureDirs[i].valid()) {
-			try {
-				const auto&& this_item = futureDirs[i].get();
-				this_recursive_info.numItems += this_item.numItems;
-				this_recursive_info.total_size += this_item.total_size;
-			}
-			catch (const std::future_error& e ) {
-				wprintf_s( L"future error, code: %i, what:%S\r\n", e.code().value(), e.what());
-				__debugbreak();
-			}
-			++completed;
-			}
-		else{
-			incomplete.emplace_back(std::move(futureDirs[i]));
-			}
-		}
+	std::vector<std::future<Directory_recursive_info>> incomplete = preprocess_incompletes(completed, futureDirs, this_recursive_info);
 
 
 	while (completed < futureDirs.size()) {
-		for(std::vector<std::future<Directory_recursive_info>>::iterator item = incomplete.begin(); item != incomplete.end(); ++item){
+		for(std::vector<std::future<Directory_recursive_info>>::iterator item = incomplete.begin(); item != incomplete.end(); ++item) {
 			if (item->valid()) {
-				try {
-					const auto&& this_item = item->get();
-					this_recursive_info.numItems += this_item.numItems;
-					this_recursive_info.total_size += this_item.total_size;
-				}
-				catch (const std::future_error& e ) {
-					wprintf_s( L"future error, code: %i, what:%S\r\n", e.code().value(), e.what());
-					__debugbreak();
-				}
+				const auto&& this_item = item->get();
+				this_recursive_info.numItems += this_item.numItems;
+				this_recursive_info.total_size += this_item.total_size;
 				++completed;
 				incomplete.erase(item);
 				}
@@ -655,7 +608,7 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 				YieldProcessor();
 				}
 			}
-	}
+		}
 	return this_recursive_info;
 	}
 
@@ -675,8 +628,7 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	const NTSTATUS conversion_result = ntdll.RtlDosPathNameToNtPathName_U_WithStatus_f(raw_dir.c_str(), &(path.managed), &ntpart, &rtl_rel_name);
 	if ( !NT_SUCCESS( conversion_result ) ) {
 		fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus failed!\r\n" );
-		__debugbreak();
-		//std::terminate();
+		return;
 		}
 	else {
 		fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus succeeded! ntpart: %s\r\n", ntpart );
@@ -703,7 +655,6 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 		//fwprintf_s( stderr, L"NtOpenFile failed!\r\n" );
 		//std::terminate();
 		//}
-	//NtQueryDirectory
 	const NTSTATUS release_result = ntdll.RtlReleaseRelativeName_f(&rtl_rel_name);
 	if(!NT_SUCCESS(release_result)) {
 		fwprintf_s( stderr, L"RtlReleaseRelativeName_f failed!\r\n" );
@@ -718,32 +669,6 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 		return;
 		}
 
-	//tp_context.pool_raw = pool_owner.get();
-
-	//::SetThreadpoolThreadMaximum(pool_owner.get(), 16u);
-
-	//{
-	//	void * context = nullptr;
-	//	work w(::CreateThreadpoolWork(hard_work, context, nullptr));
-	//	check_bool(w);
-
-	//	::SubmitThreadpoolWork(w.get());
-	//	bool cancel = false;
-	//	WaitForThreadpoolWorkCallbacks(w.get(), cancel);
-	//}
-
-	//{
-	//	void * context = nullptr;
-	//	check_bool(::TrySubmitThreadpoolCallback(
-	//	simple_work, context, nullptr));
-	//}
-
-		// Create a cleanup group for this thread pool.
-	//tp_context.cleanupgroup.reset( ::CreateThreadpoolCleanupGroup( ) );
-	//if ( NULL == tp_context.cleanupgroup.get() ) {
-	//	::wprintf_s( L"CreateThreadpoolCleanupGroup failed. LastError: %u\n", ::GetLastError( ) );
-	//	return;
-	//	}
 
 
 	// Associate the cleanup group with our thread pool.
@@ -763,45 +688,9 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	std::future<Directory_recursive_info> all_dirs_fut = qDirRecursive(tp_context);
 	
 	Directory_recursive_info recursive_info = all_dirs_fut.get();
-	//std::vector<Directory_recursive_info> all_dirs = all_dirs_fut.get();
-	//for ( rsize_t i = 0u; i < all_dirs.size(); ++i ) {
-	//	const Directory_recursive_info this_recursive_info = std::move(all_dirs[i]);
-	//	recursive_info.numItems += recursive_info.numItems;
-	//	recursive_info.total_size += recursive_info.total_size;
-	//	}
 
 
 
-	/*
-	const std::wstring normDirString( dir );
-	assert( dir.size( ) > 2 );
-	if ( ( dir.back() != L'*' ) && ( dir[ dir.length( ) - 2 ] != L'\\' ) ) {
-		dir += L"\\*";
-		}
-	else if ( dir.back() == L'\\' ) {
-		dir += L"*";
-		}
-	std::vector<std::future<void>> futureDirs;
-	WIN32_FIND_DATA fData = { 0 };
-	HANDLE fDataHand = ::FindFirstFileExW(dir.c_str(), FindExInfoStandard, &fData, FindExSearchNameMatch, NULL, 0);
-
-	if ( fDataHand != INVALID_HANDLE_VALUE ) {
-		BOOL res = ::FindNextFileW( fDataHand, &fData );
-		while ( ( fDataHand != INVALID_HANDLE_VALUE ) && ( res != 0 ) ) {
-			const int not_this_directory = ::wcscmp( fData.cFileName, L".." );
-			if ( ( fData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) && ( not_this_directory != 0 ) ) {
-				futureDirs.emplace_back( std::async( std::launch::async|std::launch::deferred, stdRecurseFindFutures, ( normDirString + L"\\" + fData.cFileName ) ) );
-				}
-			res = ::FindNextFileW( fDataHand, &fData );
-			}
-		}
-	::FindClose( fDataHand );
-	for ( size_t i = 0; i < futureDirs.size(); ++i ) {
-		futureDirs[ i ].get( );
-		}
-
-
-		*/
 	//NTSTATUS const close_result = ntdll.NtClose_f(nt_dir_handle);
 	//if (!NT_SUCCESS( close_result ) ) {
 	//	fwprintf_s( stderr, L"Closing handle nt_dir_handle (%p) failed!\r\n\tResult code: %li\r\n", nt_dir_handle, close_result );
@@ -816,10 +705,6 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 
 
 int wmain( int argc,  _Readable_elements_( argc ) const WCHAR* argv[ ], WCHAR*[ ] ) {
-	//if( argc >= 2 ) {
-	//	abort();
-	//}
-	wprintf_s(L"abort address: %p\r\n", &(abort));
 	if ( argc < 2 ) {
 		::puts("Need more than 1 argument!\r\n");
 		return ERROR_BAD_ARGUMENTS;
