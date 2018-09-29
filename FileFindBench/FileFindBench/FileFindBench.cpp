@@ -668,7 +668,7 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 		::wprintf_s(L"CreateThreadpool failed. LastError: %u\n", ::GetLastError( ) );
 		return;
 		}
-	::SetThreadpoolThreadMaximum(pool_owner.get(), 4u);
+	//::SetThreadpoolThreadMaximum(pool_owner.get(), 4u);
 
 
 
