@@ -45,6 +45,7 @@
 #include <stdio.h>
 #include <queue>
 #include <functional>
+#include <type_traits>
 
 #pragma warning(pop)
 
