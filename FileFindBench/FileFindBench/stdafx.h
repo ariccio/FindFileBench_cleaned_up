@@ -27,7 +27,7 @@
 #pragma comment(lib, "Advapi32.lib")
 #include <Windows.h>
 #include "targetver.h"
-
+#include <process.h>
 
 #ifndef _DEBUG
 #pragma warning(disable:4555) //expression has no effect; expected expression with side-effect //Happens alot with AfxCheckMemory in debug builds.

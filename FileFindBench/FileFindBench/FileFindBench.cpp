@@ -219,17 +219,18 @@ std::uint64_t GetCompressedFileSize_filename( const std::wstring path ) noexcept
 	const auto last_err_old = ::GetLastError( );
 	ret.QuadPart = 0;//zero initializing this is critical!
 	ret.LowPart = ::GetCompressedFileSizeW( path.c_str( ), &ret.HighPart );
+	if( ret.LowPart != INVALID_FILE_SIZE) {
+		return ret.QuadPart;
+		}
 	const auto last_err = ::GetLastError( );
-	if ( ret.LowPart == INVALID_FILE_SIZE ) {
-		if ( ( last_err != NO_ERROR ) && ( last_err != last_err_old ) ) {
-			::fwprintf_s( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
-			return UINT64_MAX;// IN case of an error return size from CFileFind object
-			}
+	if ( ( last_err != NO_ERROR ) && ( last_err != last_err_old ) ) {
+		::fwprintf_s( stderr, L"Error! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+		return UINT64_MAX;// IN case of an error return size from CFileFind object
+		}
 
-		if ( ret.HighPart != NULL ) {
-			::fwprintf_s( stderr, L"WTF ERROR! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
-			return UINT64_MAX;
-			}
+	if ( ret.HighPart != NULL ) {
+		::fwprintf_s( stderr, L"WTF ERROR! Filepath: %s, Filepath length: %i, GetLastError: %s\r\n", path.c_str( ), int( path.length( ) ), handyDandyErrMsgFormatter( ).c_str( ) );
+		return UINT64_MAX;
 		}
 	return ret.QuadPart;
 	}
@@ -299,16 +300,17 @@ std::unique_ptr<wchar_t[]> build_level_str( unsigned int level ) {
 	}
 
 void displayInfo( const THIS_FILE_INFORMATION_CLASS* const pFileInf, const Directory_ThreadPool_Context& Context ) {
-	if ( writeToScreen ) {
-		const std::wstring &dir = Context.this_query_dir;
-		std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
-		const std::wstring this_file_name( pFileInf->FileName, (pFileInf->FileNameLength / sizeof( WCHAR )) );
-		const std::wstring some_name( dir + L'\\' + this_file_name );
-		if ( !(pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ) {
-			::wprintf_s( L"%sAttributes for file: %s\r\n", level_str.get(), some_name.c_str( ) );
-			::wprintf_s( L"%s\tFILE_ATTRIBUTE_DIRECTORY: %s\r\n", level_str.get(), ((pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? L"YES" : L"NO") );
-			::wprintf_s( L"%s\tFILE_ATTRIBUTE_COMPRESSED: %s\r\n", level_str.get(), ((pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED) ? L"YES" : L"NO") );
-			}
+	if(!writeToScreen){
+		return;
+		}
+	const std::wstring &dir = Context.this_query_dir;
+	std::unique_ptr<wchar_t[]> level_str( build_level_str( Context.level));
+	const std::wstring this_file_name( pFileInf->FileName, (pFileInf->FileNameLength / sizeof( WCHAR )) );
+	const std::wstring some_name( dir + L'\\' + this_file_name );
+	if ( !(pFileInf->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ) {
+		::wprintf_s( L"%sAttributes for file: %s\r\n", level_str.get(), some_name.c_str( ) );
+		::wprintf_s( L"%s\tFILE_ATTRIBUTE_DIRECTORY: %s\r\n", level_str.get(), ((pFileInf->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? L"YES" : L"NO") );
+		::wprintf_s( L"%s\tFILE_ATTRIBUTE_COMPRESSED: %s\r\n", level_str.get(), ((pFileInf->FileAttributes & FILE_ATTRIBUTE_COMPRESSED) ? L"YES" : L"NO") );
 		}
 	}
 
@@ -329,16 +331,16 @@ void writeCompressedFileSizeInfoToScreen( const THIS_FILE_INFORMATION_CLASS* con
 
 bool openDirectoryHandle( const std::wstring& dir, _Out_ HANDLE* const new_handle ) noexcept {
 	(*new_handle) = ::CreateFileW(dir.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OVERLAPPED, nullptr);
-	if ( (*new_handle) == INVALID_HANDLE_VALUE ) {
-		const DWORD err = ::GetLastError( );
-		if ( err == ERROR_ACCESS_DENIED ) {
-			return false;
-			}
-		::fwprintf_s( stderr, L"Failed to open directory %s because of error %lu\r\n", dir.c_str( ), err );
-		::fwprintf_s( stderr, L"err: `%lu` means: %s\r\n", err, handyDandyErrMsgFormatter( ).c_str( ) );
+	if ( (*new_handle) != INVALID_HANDLE_VALUE ) {
+		return true;
+		}
+	const DWORD err = ::GetLastError( );
+	if ( err == ERROR_ACCESS_DENIED ) {
 		return false;
 		}
-	return true;
+	::fwprintf_s( stderr, L"Failed to open directory %s because of error %lu\r\n", dir.c_str( ), err );
+	::fwprintf_s( stderr, L"err: `%lu` means: %s\r\n", err, handyDandyErrMsgFormatter( ).c_str( ) );
+	return false;
 	}
 
 
@@ -430,10 +432,11 @@ void FormatAndWriteCompressedFileSizeInfoToScreen( const THIS_FILE_INFORMATION_C
 	writeCompressedFileSizeInfoToScreen( pFileInf, Context.this_query_dir, fNameChar, level_str.get( ) );
 	}
 
-void DumpOffsetInfoToScreen( const THIS_FILE_INFORMATION_CLASS * pFileInf ) noexcept{
-	if ( writeToScreen ) {
-		::wprintf_s( L"\t\tpFileInf: %p, pFileInf->NextEntryOffset: %lu, ( pFileInf + pFileInf->NextEntryOffset ): %p\r\n", pFileInf, pFileInf->NextEntryOffset, (pFileInf + pFileInf->NextEntryOffset) );
+void DumpOffsetInfoToScreen( const THIS_FILE_INFORMATION_CLASS * pFileInf ) noexcept {
+	if (!writeToScreen){
+		return;
 		}
+	::wprintf_s( L"\t\tpFileInf: %p, pFileInf->NextEntryOffset: %lu, ( pFileInf + pFileInf->NextEntryOffset ): %p\r\n", pFileInf, pFileInf->NextEntryOffset, (pFileInf + pFileInf->NextEntryOffset) );
 	}
 
 PTHIS_FILE_INFORMATION_CLASS next_entry(_In_ const THIS_FILE_INFORMATION_CLASS* pFileInf) noexcept {
@@ -461,6 +464,8 @@ PTHIS_FILE_INFORMATION_CLASS advance(_In_ const THIS_FILE_INFORMATION_CLASS* con
 	return next_if_next_entry(pFileInf);
 	} 
 
+
+
 std::vector<std::wstring> walk_directory_buffer(_In_ const THIS_FILE_INFORMATION_CLASS* const pFirstFileInf, const NTSTATUS& query_directory_result, Directory_recursive_info& this_recursive_info, const Directory_ThreadPool_Context& Context ) {
 	std::vector<std::wstring> breadthDirs;
 	if(!NT_SUCCESS( query_directory_result )) {
@@ -478,7 +483,6 @@ std::vector<std::wstring> walk_directory_buffer(_In_ const THIS_FILE_INFORMATION
 			}
 
 		this_recursive_info.total_size += pFileInf->AllocationSize.QuadPart;
-		
 		displayInfo( pFileInf, Context );
 		
 		++(this_recursive_info.numItems);
@@ -499,6 +503,17 @@ std::vector<std::wstring> walk_directory_buffer(_In_ const THIS_FILE_INFORMATION
 //	_Field_size_(size) T* ptr_align;
 //	size_t size;
 //	};
+
+void assert_no_waitable_NTSTATUS( NTSTATUS const query_directory_result, const NTSTATUS sBefore ) {
+	if ( (query_directory_result == STATUS_TIMEOUT) || (query_directory_result == STATUS_PENDING) ) {
+		__debugbreak();
+		//std::terminate( );
+		}
+	assert( NT_SUCCESS( query_directory_result ) );
+	assert( query_directory_result != sBefore );
+	assert( ::GetLastError( ) != ERROR_MORE_DATA );
+
+	}
 
 std::vector<std::wstring> callNtQueryDirectoryFile(Directory_ThreadPool_Context& Context, Directory_recursive_info& this_recursive_info, unique_handle<HANDLE, file_traits>& nt_dir_handle) {
 
@@ -526,13 +541,8 @@ std::vector<std::wstring> callNtQueryDirectoryFile(Directory_ThreadPool_Context&
 	assert( init_bufSize > 1 );
 	const NTSTATUS sBefore = query_directory_result;
 	query_directory_result = ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), nullptr, nullptr, nullptr, &iosb, idInfo.get( ), init_bufSize, InfoClass, FALSE, nullptr, TRUE );
-	if ( (query_directory_result == STATUS_TIMEOUT) || (query_directory_result == STATUS_PENDING) ) {
-		__debugbreak();
-		//std::terminate( );
-		}
-	assert( NT_SUCCESS( query_directory_result ) );
-	assert( query_directory_result != sBefore );
-	assert( ::GetLastError( ) != ERROR_MORE_DATA );
+
+	assert_no_waitable_NTSTATUS(query_directory_result, sBefore);
 
 	ULONG bufSize = init_bufSize;
 	while ( query_directory_result == STATUS_BUFFER_OVERFLOW ) {
@@ -541,6 +551,7 @@ std::vector<std::wstring> callNtQueryDirectoryFile(Directory_ThreadPool_Context&
 		idInfo = std::make_unique<__declspec(align(8)) wchar_t[ ]>( bufSize );
 		query_directory_result = /*co_await?*/ ntdll.NtQueryDirectoryFile_f( nt_dir_handle.get(), nullptr, nullptr, nullptr, &iosb, idInfo.get( ), bufSize, InfoClass, FALSE, nullptr, TRUE );
 		}
+
 	assert( NT_SUCCESS( query_directory_result ) );
 	//bool id_info_heap = false;
 	const ULONG_PTR bufSizeWritten = iosb.Information;
@@ -573,6 +584,10 @@ std::vector<std::future<Directory_recursive_info>> preprocess_incompletes(rsize_
 	return incomplete;
 	}
 
+bool is_not_folder_path(Directory_ThreadPool_Context& Context) {
+	return (Context.this_query_dir[ Context.this_query_dir.length( ) - 1 ] != L'\\');
+}
+
 std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Context Context ) {
 	//co_await std::experimental::suspend_always();
 	Directory_recursive_info this_recursive_info{};
@@ -585,7 +600,6 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 	unique_handle<HANDLE, file_traits> nt_dir_handle( nt_dir_handle_raw );
 
 	std::vector<std::future<Directory_recursive_info>> futureDirs;
-	std::future<std::vector<Directory_recursive_info>> return_futures;
 
 	std::vector<std::wstring> breadthDirs = callNtQueryDirectoryFile( Context, this_recursive_info, nt_dir_handle );
 
@@ -594,23 +608,19 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 		this_subdir_tp_context.level = Context.level + 1;
 		//this_subdir_tp_context.pool_raw = tp_context.pool_raw;
 		this_subdir_tp_context.recursive_info = Directory_recursive_info{};
-		if ( Context.this_query_dir[ Context.this_query_dir.length( ) - 1 ] != L'\\' ) {
-			//breadthDirs.emplace_back( std::wstring( curDir ) + L'\\' + fNameChar + L'\\' );
+		if ( is_not_folder_path(Context) ) {
 			auto query = std::wstring( Context.this_query_dir + L'\\' + breadthDirs[i] + L'\\' );
 			this_subdir_tp_context.this_query_dir = query;
 			//qDirRecursive( Instance, this_subdir_tp_context, Work );
 			futureDirs.emplace_back( qDirRecursive( std::move( this_subdir_tp_context ) ) );
 
-			//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
 			}
 		else {
-			//breadthDirs.emplace_back( std::wstring( curDir ) + fNameChar + L'\\' );
 			auto query = std::wstring( Context.this_query_dir + breadthDirs[i] + L'\\' );
 			this_subdir_tp_context.this_query_dir = query;
 			//qDirRecursive( Instance, this_subdir_tp_context, Work );
 			futureDirs.emplace_back( qDirRecursive( std::move( this_subdir_tp_context ) ) );
 
-			//futureDirs.emplace_back( std::async( std::launch::async | std::launch::deferred, ListDirectory, query, writeToScreen, ntdll ) );
 			}	
 		co_await resume_background();
 
@@ -639,6 +649,28 @@ std::future<Directory_recursive_info> qDirRecursive( Directory_ThreadPool_Contex
 	return this_recursive_info;
 	}
 
+struct pack_future_and_tp_context {
+	std::future<Directory_recursive_info> all_dirs_fut;
+	Directory_ThreadPool_Context tp_context;
+};
+
+void __cdecl wrap_qDirRecursive( __typefix( pack_future_and_tp_context ) void* const packed_args ) {
+	pack_future_and_tp_context packed_struct = reinterpret_cast<pack_future_and_tp_context>(packed_args);
+
+	}
+
+_Success_(return)
+bool convert_to_NtPathName( const std::wstring &raw_dir, unicode_string_dynamic_memory_manager &path, _Out_ PCWSTR &ntpart, _Out_ RTL_RELATIVE_NAME &rtl_rel_name )
+{
+	const NTSTATUS conversion_result = ntdll.RtlDosPathNameToNtPathName_U_WithStatus_f( raw_dir.c_str( ), &(path.managed), &ntpart, &rtl_rel_name );
+	if ( !NT_SUCCESS( conversion_result ) ) {
+		fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus failed!\r\n" );
+		return true;
+	}
+	fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus succeeded! ntpart: %s\r\n", ntpart );
+	return false;
+}
+
 void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	const std::wstring dir = L"\\\\?\\" + raw_dir;
 	Directory_ThreadPool_Context tp_context;
@@ -652,13 +684,9 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	RTL_RELATIVE_NAME rtl_rel_name = {};
 	PCWSTR ntpart = nullptr;
 	////::RtlInitUnicodeString(&path, dir.c_str());
-	const NTSTATUS conversion_result = ntdll.RtlDosPathNameToNtPathName_U_WithStatus_f(raw_dir.c_str(), &(path.managed), &ntpart, &rtl_rel_name);
-	if ( !NT_SUCCESS( conversion_result ) ) {
-		fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus failed!\r\n" );
+	const bool converted = convert_to_NtPathName( raw_dir, path, ntpart, rtl_rel_name, retflag );
+	if ( !retflag ) {
 		return;
-		}
-	else {
-		fwprintf_s( stderr, L"RtlDosPathNameToNtPathName_U_WithStatus succeeded! ntpart: %s\r\n", ntpart );
 		}
 
 
@@ -714,7 +742,9 @@ void stdRecurseFindFutures( const std::wstring raw_dir ) {
 	//::SubmitThreadpoolWork(work);
 	//::WaitForThreadpoolWorkCallbacks(work, FALSE);
 	//qDirRecursive( nullptr, &tp_context, nullptr );
-
+	
+	
+	_beginthreadex(nullptr, 0u, )
 	std::future<Directory_recursive_info> all_dirs_fut = qDirRecursive(tp_context);
 	
 	Directory_recursive_info recursive_info = all_dirs_fut.get();
